@@ -387,7 +387,7 @@ class VoiceAgentElement extends HTMLElement {
             <span id="button-text">${this.buttonText}</span>
           </button>
           <div class="va-widget-branding">
-            Powered by <a href="https://ringrookie.mragame.com" target="_blank" rel="noopener noreferrer">Ring Rookie</a>
+            Powered by <a href="https://www.mragame.com/ring-rookie" target="_blank" rel="noopener noreferrer">Ring Rookie</a>
           </div>
         </div>
       </div>
