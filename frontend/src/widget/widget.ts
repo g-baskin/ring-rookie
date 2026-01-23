@@ -8,6 +8,7 @@
  */
 
 type AgentState = "idle" | "listening" | "thinking" | "speaking";
+type WidgetStyle = "default" | "retro";
 
 // Styles for the widget
 const styles = `
@@ -220,6 +221,228 @@ const styles = `
       right: 0;
     }
   }
+
+  /* ========================================
+     RETRO ARCADE THEME
+     Synthwave aesthetic with neon glow, pixel shadows, and CRT effects
+     ======================================== */
+
+  .va-widget-button.theme-retro {
+    --retro-neon-green: #39ff14;
+    --retro-magenta: #ff00ff;
+    --retro-cyan: #00ffff;
+    --retro-dark: #0a0a0f;
+    --retro-pixel-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.8);
+
+    background: var(--retro-dark);
+    border: 2px solid var(--retro-neon-green);
+    border-radius: 4px;
+    box-shadow:
+      var(--retro-pixel-shadow),
+      0 0 20px 4px rgba(57, 255, 20, 0.4),
+      inset 0 0 20px rgba(57, 255, 20, 0.1);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    font-family: "Press Start 2P", "Courier New", monospace;
+    font-size: 11px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Scanline overlay */
+  .va-widget-button.theme-retro::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Dot grid pattern */
+  .va-widget-button.theme-retro::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgba(57, 255, 20, 0.08) 1px,
+      transparent 1px
+    );
+    background-size: 4px 4px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .va-widget-button.theme-retro:hover {
+    transform: translate(-2px, -2px);
+    box-shadow:
+      6px 6px 0 0 rgba(0, 0, 0, 0.8),
+      0 0 30px 8px rgba(57, 255, 20, 0.5),
+      inset 0 0 30px rgba(57, 255, 20, 0.15);
+  }
+
+  .va-widget-button.theme-retro:active {
+    transform: translate(2px, 2px);
+    box-shadow:
+      2px 2px 0 0 rgba(0, 0, 0, 0.8),
+      0 0 15px 2px rgba(57, 255, 20, 0.3);
+  }
+
+  /* Retro orb styling */
+  .va-widget-button.theme-retro .va-widget-orb {
+    border: 2px solid var(--retro-neon-green);
+    border-radius: 4px;
+    background: var(--retro-dark);
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  }
+
+  .va-widget-button.theme-retro .va-widget-orb-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--retro-neon-green) 0%,
+      rgba(57, 255, 20, 0.3) 50%,
+      var(--retro-neon-green) 100%
+    );
+    border-radius: 2px;
+    opacity: 0.3;
+  }
+
+  .va-widget-button.theme-retro .va-widget-orb-gradient.animated {
+    animation: va-retro-pulse 1.5s ease-in-out infinite;
+  }
+
+  .va-widget-button.theme-retro .va-widget-orb-inner {
+    background: var(--retro-dark);
+    border-radius: 2px;
+    inset: 4px;
+  }
+
+  .va-widget-button.theme-retro .va-widget-orb-dot {
+    background: var(--retro-neon-green);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--retro-neon-green);
+    inset: 8px;
+  }
+
+  /* Retro state: Listening - Neon Green */
+  .va-widget-button.theme-retro.state-listening {
+    border-color: var(--retro-neon-green);
+    box-shadow:
+      var(--retro-pixel-shadow),
+      0 0 25px 6px rgba(57, 255, 20, 0.5),
+      inset 0 0 25px rgba(57, 255, 20, 0.15);
+  }
+
+  .va-widget-button.theme-retro.state-listening .va-widget-orb {
+    border-color: var(--retro-neon-green);
+    box-shadow: 0 0 15px rgba(57, 255, 20, 0.7);
+  }
+
+  .va-widget-button.theme-retro.state-listening .va-widget-orb-dot {
+    background: var(--retro-neon-green);
+    box-shadow: 0 0 12px var(--retro-neon-green);
+    animation: va-retro-listen-pulse 1s ease-in-out infinite;
+  }
+
+  /* Retro state: Thinking - Magenta */
+  .va-widget-button.theme-retro.state-thinking {
+    border-color: var(--retro-magenta);
+    box-shadow:
+      var(--retro-pixel-shadow),
+      0 0 25px 6px rgba(255, 0, 255, 0.5),
+      inset 0 0 25px rgba(255, 0, 255, 0.15);
+  }
+
+  .va-widget-button.theme-retro.state-thinking .va-widget-orb {
+    border-color: var(--retro-magenta);
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.7);
+  }
+
+  .va-widget-button.theme-retro.state-thinking .va-widget-orb-dot {
+    background: var(--retro-magenta);
+    box-shadow: 0 0 12px var(--retro-magenta);
+    animation: va-retro-think-pulse 0.6s ease-in-out infinite;
+  }
+
+  .va-widget-button.theme-retro.state-thinking .va-widget-orb-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--retro-magenta) 0%,
+      rgba(255, 0, 255, 0.3) 50%,
+      var(--retro-magenta) 100%
+    );
+  }
+
+  /* Retro state: Speaking - Cyan */
+  .va-widget-button.theme-retro.state-speaking {
+    border-color: var(--retro-cyan);
+    box-shadow:
+      var(--retro-pixel-shadow),
+      0 0 25px 6px rgba(0, 255, 255, 0.5),
+      inset 0 0 25px rgba(0, 255, 255, 0.15);
+  }
+
+  .va-widget-button.theme-retro.state-speaking .va-widget-orb {
+    border-color: var(--retro-cyan);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+  }
+
+  .va-widget-button.theme-retro.state-speaking .va-widget-orb-dot {
+    background: var(--retro-cyan);
+    box-shadow: 0 0 12px var(--retro-cyan);
+    animation: va-retro-speak-pulse 0.25s ease-in-out infinite;
+  }
+
+  .va-widget-button.theme-retro.state-speaking .va-widget-orb-gradient {
+    background: linear-gradient(
+      135deg,
+      var(--retro-cyan) 0%,
+      rgba(0, 255, 255, 0.3) 50%,
+      var(--retro-cyan) 100%
+    );
+  }
+
+  /* Retro branding */
+  .theme-retro-container .va-widget-branding {
+    font-family: "Press Start 2P", "Courier New", monospace;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .theme-retro-container .va-widget-branding a {
+    color: var(--retro-neon-green, #39ff14);
+    text-shadow: 0 0 8px rgba(57, 255, 20, 0.5);
+  }
+
+  /* Retro animations */
+  @keyframes va-retro-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+  }
+
+  @keyframes va-retro-listen-pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 8px var(--retro-neon-green); }
+    50% { transform: scale(1.2); box-shadow: 0 0 16px var(--retro-neon-green); }
+  }
+
+  @keyframes va-retro-think-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+
+  @keyframes va-retro-speak-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+  }
 `;
 
 class VoiceAgentElement extends HTMLElement {
@@ -231,6 +454,7 @@ class VoiceAgentElement extends HTMLElement {
   private buttonText: string = "Voice Chat";
   private baseUrl: string = "";
   private primaryColor: string = "#6366f1";
+  private widgetStyle: WidgetStyle = "default";
   private currentState: AgentState = "idle";
   private messageHandler: ((event: MessageEvent) => void) | null = null;
 
@@ -240,7 +464,15 @@ class VoiceAgentElement extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return ["agent-id", "position", "theme", "button-text", "base-url", "primary-color"];
+    return [
+      "agent-id",
+      "position",
+      "theme",
+      "button-text",
+      "base-url",
+      "primary-color",
+      "widget-style",
+    ];
   }
 
   attributeChangedCallback(name: string, _oldValue: string, newValue: string) {
@@ -263,6 +495,11 @@ class VoiceAgentElement extends HTMLElement {
       case "primary-color":
         this.primaryColor = newValue || "#6366f1";
         break;
+      case "widget-style":
+        if (newValue === "retro" || newValue === "default") {
+          this.widgetStyle = newValue;
+        }
+        break;
     }
     if (this.isConnected) {
       this.render();
@@ -277,6 +514,7 @@ class VoiceAgentElement extends HTMLElement {
     this.buttonText = this.getAttribute("button-text") ?? "Voice Chat";
     this.baseUrl = this.getAttribute("base-url") ?? this.detectBaseUrl();
     this.primaryColor = this.getAttribute("primary-color") ?? "#6366f1";
+    this.widgetStyle = this.detectStyle();
 
     this.render();
 
@@ -308,6 +546,22 @@ class VoiceAgentElement extends HTMLElement {
     }
     // Fallback to current origin
     return window.location.origin;
+  }
+
+  private detectStyle(): WidgetStyle {
+    // Check explicit attribute first
+    const attr = this.getAttribute("widget-style");
+    if (attr === "retro" || attr === "default") {
+      return attr;
+    }
+    // Auto-detect retro style for mragame.com
+    if (
+      window.location.hostname.includes("mragame.com") ||
+      window.location.hostname.includes("mragame")
+    ) {
+      return "retro";
+    }
+    return "default";
   }
 
   private hexToHSL(hex: string): { h: number; s: number; l: number } {
@@ -360,6 +614,10 @@ class VoiceAgentElement extends HTMLElement {
       .replace(/var\(--va-primary-60, #6366f188\)/g, primary60)
       .replace(/var\(--va-primary-30, #6366f144\)/g, primary30);
 
+    // Determine theme classes
+    const themeClass = this.widgetStyle === "retro" ? "theme-retro" : "";
+    const containerThemeClass = this.widgetStyle === "retro" ? "theme-retro-container" : "";
+
     this.shadow.innerHTML = `
       <style>
         :host {
@@ -369,7 +627,7 @@ class VoiceAgentElement extends HTMLElement {
         }
         ${customStyles}
       </style>
-      <div class="va-widget-container ${this.position}">
+      <div class="va-widget-container ${this.position} ${containerThemeClass}">
         <div class="va-widget-popup" id="popup">
           <iframe
             src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}&autostart=true"
@@ -378,7 +636,7 @@ class VoiceAgentElement extends HTMLElement {
           ></iframe>
         </div>
         <div class="va-widget-button-wrapper">
-          <button class="va-widget-button" id="toggle">
+          <button class="va-widget-button ${themeClass}" id="toggle">
             <div class="va-widget-orb" id="orb">
               <div class="va-widget-orb-gradient" id="orb-gradient"></div>
               <div class="va-widget-orb-inner"></div>
@@ -437,7 +695,7 @@ class VoiceAgentElement extends HTMLElement {
     const button = this.shadow.getElementById("toggle");
 
     if (button) {
-      // Remove all state classes
+      // Remove all state classes (preserves theme-retro class)
       button.classList.remove("state-idle", "state-listening", "state-thinking", "state-speaking");
       // Add current state class
       if (state !== "idle") {
@@ -490,7 +748,13 @@ class VoiceAgentElement extends HTMLElement {
       // Dynamic glow intensity based on audio level
       const glowSize = 12 + level * 12;
       const glowOpacity = 0.4 + level * 0.4;
-      button.style.boxShadow = `0 4px 24px rgba(0, 0, 0, 0.15), 0 0 ${glowSize}px ${glowSize / 2}px rgba(59, 130, 246, ${glowOpacity})`;
+
+      if (this.widgetStyle === "retro") {
+        // Retro cyan glow for speaking state
+        button.style.boxShadow = `4px 4px 0 0 rgba(0, 0, 0, 0.8), 0 0 ${glowSize + 10}px ${glowSize / 2 + 4}px rgba(0, 255, 255, ${glowOpacity}), inset 0 0 25px rgba(0, 255, 255, 0.15)`;
+      } else {
+        button.style.boxShadow = `0 4px 24px rgba(0, 0, 0, 0.15), 0 0 ${glowSize}px ${glowSize / 2}px rgba(59, 130, 246, ${glowOpacity})`;
+      }
     }
   }
 }
