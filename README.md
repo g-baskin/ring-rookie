@@ -1,26 +1,26 @@
-# Voice Noob
+# Ring Rookie
 
 Build AI voice agents that handle phone calls. No PhD required.
 
 Built by [Ken Kai](https://www.youtube.com/@kenkaidoesai) · [Join the community](https://www.skool.com/kenkai/about)
 
-![Voice Noob](voicenoob.png)
+![Ring Rookie](ringrookie.png)
 
 ---
 
 ## What Is This?
 
-Voice Noob is an open-source platform for creating AI-powered phone agents. Configure an agent, connect a phone number, and let it handle calls — booking appointments, answering questions, or qualifying leads while you sleep.
+Ring Rookie is an open-source platform for creating AI-powered phone agents. Configure an agent, connect a phone number, and let it handle calls — booking appointments, answering questions, or qualifying leads while you sleep.
 
 **The problem:** Building voice AI is painful. You need to stitch together speech-to-text, LLMs, text-to-speech, telephony, and a dozen APIs. Then pray it doesn't sound like a robot.
 
-**The solution:** Voice Noob handles the plumbing. Pick your AI tier, write a system prompt, enable tools, and deploy.
+**The solution:** Ring Rookie handles the plumbing. Pick your AI tier, write a system prompt, enable tools, and deploy.
 
 ---
 
-## Why Voice Noob?
+## Why Ring Rookie?
 
-| Feature | Voice Noob | Vapi | Retell | Bland AI |
+| Feature | Ring Rookie | Vapi | Retell | Bland AI |
 |---------|------------|------|--------|----------|
 | Open source | Yes | No | No | No |
 | Self-hostable | Yes | No | No | No |
@@ -108,8 +108,8 @@ Pick based on your budget and quality needs:
 
 ```bash
 # Clone the repo
-git clone https://github.com/KenKaiii/voice-noob.git
-cd voice-noob
+git clone https://github.com/KenKaiii/ring-rookie.git
+cd ring-rookie
 
 # Copy environment files
 cp backend/.env.example backend/.env
@@ -145,7 +145,7 @@ Open <http://localhost:3000> and create your first agent.
 ## Project Structure
 
 ```text
-voice-noob/
+ring-rookie/
 ├── backend/           # FastAPI Python backend
 │   ├── app/api/       # API routes
 │   ├── app/services/  # Business logic & integrations

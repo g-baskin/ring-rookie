@@ -1,11 +1,11 @@
-# Voice Noob
+# Ring Rookie
 
 AI-powered voice agent platform for configuring and deploying custom voice agents with tool calling, multi-provider support, and transparent pricing tiers.
 
 ## Project Structure
 
 ```
-voice-noob/
+ring-rookie/
 ├── backend/                    # FastAPI Python backend
 │   ├── app/
 │   │   ├── api/               # API routes (agents, auth, crm, realtime, telephony, workspaces)

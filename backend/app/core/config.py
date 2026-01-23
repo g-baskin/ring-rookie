@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    APP_NAME: str = "Voice Noob API"
+    APP_NAME: str = "Ring Rookie API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_DB: str = "voicenoob"
+    POSTGRES_DB: str = "ringrookie"
     DATABASE_URL: PostgresDsn | None = None
 
     @field_validator("DATABASE_URL", mode="before")
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
 
     # Default Admin User (created on first startup if no users exist)
-    ADMIN_EMAIL: str = "admin@voicenoob.com"
+    ADMIN_EMAIL: str = "admin@mragame.com"
     ADMIN_PASSWORD: str = "admin"
     ADMIN_NAME: str = "Admin"
 
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
 
     # OpenTelemetry
     OTEL_ENABLED: bool = False
-    OTEL_SERVICE_NAME: str = "voicenoob-api"
+    OTEL_SERVICE_NAME: str = "ringrookie-api"
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 
 

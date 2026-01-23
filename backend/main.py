@@ -1,5 +1,5 @@
 def main():
-    print("Hello from voicenoob-api!")
+    print("Hello from ringrookie-api!")
 
 
 if __name__ == "__main__":

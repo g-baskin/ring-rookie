@@ -48,7 +48,7 @@ export default function LoginPage() {
             backgroundSize: "200% 100%",
           }}
         >
-          Voice Noob
+          Ring Rookie
         </span>
       </div>
       <Card className="w-full max-w-md">
