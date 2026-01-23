@@ -49,3 +49,14 @@ async def health_check_redis(response: Response) -> dict[str, str]:
         logger.exception("Redis health check failed")
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unhealthy", "redis": str(e)}
+
+
+@router.get("/health/cors")
+async def health_check_cors() -> dict[str, list[str] | bool]:
+    """Debug endpoint to check CORS configuration."""
+    return {
+        "cors_origins": settings.CORS_ORIGINS,
+        "cors_credentials": settings.CORS_ALLOW_CREDENTIALS,
+        "cors_methods": settings.CORS_ALLOW_METHODS,
+        "cors_headers": settings.CORS_ALLOW_HEADERS,
+    }
