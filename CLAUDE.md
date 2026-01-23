@@ -79,3 +79,38 @@ cd frontend && npm run dev                            # Check compilation warnin
 **Backend**: FastAPI, PostgreSQL 17, Redis 7, SQLAlchemy 2.0, Python 3.12+, uv
 **Frontend**: Next.js 15, React 19, TypeScript 5.7, Tailwind, shadcn/ui
 **Telephony**: Telnyx (primary), Twilio (optional)
+
+## Important Patterns
+
+### User ID Mapping (Integer ↔ UUID)
+
+The codebase has two user ID formats that must be converted:
+
+| Table | Column | Type | Example |
+|-------|--------|------|---------|
+| `users` | `id` | Integer | `1` |
+| `agents` | `user_id` | Integer | `1` |
+| `user_settings` | `user_id` | UUID | `43f2e40a-0efc-559a-8a82-981306f42751` |
+| `call_records` | `user_id` | UUID | `43f2e40a-0efc-559a-8a82-981306f42751` |
+
+**Always use `user_id_to_uuid()` when:**
+- Looking up `user_settings` from an agent's `user_id`
+- Creating `call_records` from an agent's `user_id`
+- Any operation requiring UUID user_id from integer user_id
+
+```python
+from app.core.auth import user_id_to_uuid
+
+# Convert integer user_id to UUID
+user_uuid = user_id_to_uuid(agent.user_id)  # 1 → 43f2e40a-0efc-559a-8a82-981306f42751
+```
+
+The function uses UUID5 with a fixed namespace for deterministic, consistent conversion.
+
+### Embed Widget Origin Validation
+
+The embed API validates Origin headers for security. Special cases:
+
+- **Null origins**: Allowed when `localhost` is in `allowed_domains` (for same-origin iframe requests)
+- **Wildcards**: `*.example.com` matches any subdomain
+- **Empty list**: Allows all origins (dev/testing only)

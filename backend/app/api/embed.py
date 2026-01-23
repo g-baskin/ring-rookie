@@ -89,7 +89,9 @@ def validate_origin(origin: str | None, allowed_domains: list[str]) -> bool:
         return True
 
     if not origin:
-        return False
+        # Allow null origin for same-origin iframe requests when localhost is allowed
+        # This happens when embed iframe on localhost:3000 makes API calls to localhost:3000
+        return any(d.startswith("localhost") for d in allowed_domains)
 
     # Extract hostname from origin (e.g., "https://example.com" -> "example.com")
     try:
@@ -787,6 +789,7 @@ async def save_embed_transcript(
     - Origin validation against allowed domains
     - Only saves for active, embed-enabled agents
     """
+    from app.core.auth import user_id_to_uuid
     from app.models.call_record import CallDirection, CallRecord, CallStatus
     from app.models.workspace import AgentWorkspace
 
@@ -831,7 +834,7 @@ async def save_embed_transcript(
 
     # Create call record for widget session
     call_record = CallRecord(
-        user_id=agent.user_id,
+        user_id=user_id_to_uuid(agent.user_id),
         workspace_id=workspace_id,
         provider="widget",
         provider_call_id=transcript_request.session_id,
