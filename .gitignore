@@ -74,3 +74,6 @@ frontend/.env.local
 Thumbs.db
 .vercel
 .env*.local
+# Seed files with secrets (use --no-secrets for git)
+backend/seeds/*_secrets.json
+backend/seeds/*_full.json

@@ -114,3 +114,69 @@ The embed API validates Origin headers for security. Special cases:
 - **Null origins**: Allowed when `localhost` is in `allowed_domains` (for same-origin iframe requests)
 - **Wildcards**: `*.example.com` matches any subdomain
 - **Empty list**: Allows all origins (dev/testing only)
+
+## Data Seeding (Dev → QA → Prod)
+
+Database schema changes follow CI/CD via Alembic migrations. **Data** (agents, users, settings) requires explicit seeding.
+
+### Seed Script Location
+```
+backend/
+├── scripts/seed_data.py    # Seed management CLI
+└── seeds/                   # JSON seed files (git-tracked)
+    └── mragame_agent.json  # Example: MrAGame voice agent
+```
+
+### Commands
+
+```bash
+cd backend && source .venv/bin/activate
+
+# List agents in an environment
+python scripts/seed_data.py list --env local
+python scripts/seed_data.py list --env production
+
+# Export agent to seed file (strips secrets with --no-secrets)
+python scripts/seed_data.py export --env local --agent ag_IXqnWYBG -o seeds/my_agent.json
+python scripts/seed_data.py export --env local --agent ag_IXqnWYBG -o seeds/my_agent.json --no-secrets
+
+# Import seed file to environment
+python scripts/seed_data.py import --env production -i seeds/my_agent.json
+python scripts/seed_data.py import --env production -i seeds/my_agent.json --no-secrets
+
+# Direct sync between environments
+python scripts/seed_data.py sync --source local --target production --agent ag_IXqnWYBG
+```
+
+### Docker Support
+
+The script auto-detects Docker environments and uses appropriate hostnames:
+- **Local (bare metal)**: `postgresql://postgres:postgres@localhost:5432/ringrookie`
+- **Docker container**: `postgresql://postgres:postgres@db:5432/ringrookie`
+
+Override with environment variables:
+```bash
+DATABASE_URL=postgresql://... python scripts/seed_data.py import -i seeds/agent.json
+```
+
+### CI/CD Integration
+
+Add to your deployment workflow:
+
+```yaml
+# .github/workflows/deploy.yml
+- name: Seed production data
+  run: |
+    cd backend
+    pip install asyncpg
+    python scripts/seed_data.py import --env production -i seeds/production_agents.json --no-secrets
+  env:
+    PROD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+```
+
+### Security Notes
+
+- **--no-secrets**: Strips API keys, passwords before export (safe for git)
+- **Full export**: Contains encrypted passwords and API keys (keep secure)
+- **Seed files in git**: Only commit `--no-secrets` versions
+- **API keys in prod**: Add manually via dashboard or secure env vars
