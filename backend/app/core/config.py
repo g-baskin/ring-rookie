@@ -89,6 +89,16 @@ class Settings(BaseSettings):
     CORS_ALLOW_METHODS: list[str] = ["*"]
     CORS_ALLOW_HEADERS: list[str] = ["*"]
 
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: str | list[str] | None) -> list[str]:
+        """Parse CORS origins from comma-separated string or list."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
 
