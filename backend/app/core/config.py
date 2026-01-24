@@ -83,9 +83,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://localhost:4170",  # MrAGame
+        "http://localhost:4173",  # Ring Rookie frontend
         "http://localhost:8000",
         "https://ring-rookie.vercel.app",
         "https://ringrookie.mragame.com",
+        "https://mragame.com",
+        "https://www.mragame.com",
     ]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: list[str] = ["*"]

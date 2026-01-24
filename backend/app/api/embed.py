@@ -61,6 +61,7 @@ class EmbedConfigResponse(BaseModel):
     primary_color: str
     language: str
     voice: str
+    autostart: bool
 
 
 class EmbedSessionResponse(BaseModel):
@@ -173,6 +174,7 @@ async def get_embed_config(
         primary_color=embed_settings.get("primary_color", "#6366f1"),
         language=agent.language,
         voice=agent.voice,
+        autostart=embed_settings.get("autostart", True),
     )
 
 
@@ -668,6 +670,16 @@ class SaveTranscriptRequest(BaseModel):
     duration_seconds: int = 0
 
 
+class ConversationHistoryResponse(BaseModel):
+    """Response model for conversation history."""
+
+    session_id: str
+    transcript: str | None
+    started_at: str | None
+    duration_seconds: int
+    has_history: bool
+
+
 @router.post("/{public_id}/tool-call")
 async def execute_embed_tool_call(
     public_id: str,
@@ -859,3 +871,75 @@ async def save_embed_transcript(
     )
 
     return {"success": True, "call_id": str(call_record.id)}
+
+
+@router.get("/{public_id}/history", response_model=ConversationHistoryResponse)
+async def get_conversation_history(
+    public_id: str,
+    session_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    origin: str | None = Header(None),
+) -> ConversationHistoryResponse:
+    """Get conversation history for resuming a session.
+
+    This endpoint retrieves the transcript from a previous widget session
+    so the conversation context can be restored when resuming.
+
+    Security:
+    - Origin validation against allowed domains
+    - Only returns history for embed-enabled active agents
+    """
+    from app.models.call_record import CallRecord
+
+    log = logger.bind(
+        endpoint="embed_history",
+        public_id=public_id,
+        session_id=session_id,
+        origin=origin,
+    )
+
+    # Get agent
+    agent = await get_agent_by_public_id(public_id, db)
+    if not agent:
+        log.warning("agent_not_found")
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if not agent.embed_enabled or not agent.is_active:
+        log.warning("agent_not_available")
+        raise HTTPException(status_code=403, detail="Agent not available")
+
+    # Validate origin
+    if not validate_origin(origin, agent.allowed_domains):
+        log.warning("origin_not_allowed", allowed=agent.allowed_domains)
+        raise HTTPException(status_code=403, detail="Origin not allowed")
+
+    # Look up the call record by session_id (stored as provider_call_id for widget calls)
+    result = await db.execute(
+        select(CallRecord).where(
+            CallRecord.agent_id == agent.id,
+            CallRecord.provider == "widget",
+            CallRecord.provider_call_id == session_id,
+        )
+    )
+    call_record = result.scalar_one_or_none()
+
+    if not call_record:
+        log.info("no_history_found")
+        return ConversationHistoryResponse(
+            session_id=session_id,
+            transcript=None,
+            started_at=None,
+            duration_seconds=0,
+            has_history=False,
+        )
+
+    log.info("history_found", transcript_length=len(call_record.transcript or ""))
+
+    return ConversationHistoryResponse(
+        session_id=session_id,
+        transcript=call_record.transcript,
+        started_at=call_record.started_at.isoformat() if call_record.started_at else None,
+        duration_seconds=call_record.duration_seconds or 0,
+        has_history=True,
+    )

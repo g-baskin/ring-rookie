@@ -180,3 +180,72 @@ Add to your deployment workflow:
 - **Full export**: Contains encrypted passwords and API keys (keep secure)
 - **Seed files in git**: Only commit `--no-secrets` versions
 - **API keys in prod**: Add manually via dashboard or secure env vars
+
+## Chat Champ Integration
+
+**Chat Champ** is MrAGame's 6th product - an embeddable AI chat widget SaaS that shares backend infrastructure with Ring Rookie.
+
+### What Chat Champ Provides
+
+| Feature | Description |
+|---------|-------------|
+| **Streaming Responses** | Real-time token-by-token display via SSE |
+| **Knowledge Base (RAG)** | Upload docs, PDFs, URLs for context-aware responses |
+| **Conversation History** | Persist & search past conversations |
+| **Custom Branding** | Colors, greeting, position customization |
+| **Usage-Based Billing** | FREE (50 msg/day), PRO (2000), BUSINESS (10000), ENTERPRISE (unlimited) |
+
+### Shared Infrastructure
+
+Chat Champ reuses Ring Rookie's:
+- **Tool registry** - CRM, Calendly, Shopify, SMS integrations
+- **Agent model** - Extended with `greeting_message`, `embed_config`, RAG settings
+- **Workspace multi-tenancy** - Same team/permission model
+- **Public embed API** - `/api/public/chat/{public_id}/stream`
+
+### Key Backend Models
+
+```python
+# Extended Agent fields (app/models/agent.py)
+greeting_message: str           # Initial chat greeting
+embed_config: dict              # Widget customization settings
+rag_enabled: bool               # Enable knowledge base
+knowledge_base_id: UUID         # Link to knowledge base
+
+# Usage metering (app/models/usage.py)
+UsageRecord                     # Daily message tracking
+AgentBillingConfig              # Tier configuration per agent
+BillingTier                     # FREE, PRO, BUSINESS, ENTERPRISE
+
+# Knowledge base (app/models/knowledge.py)
+KnowledgeBase                   # Document collection
+KnowledgeDocument               # Uploaded files/URLs
+KnowledgeChunk                  # Embedded text chunks (pgvector)
+```
+
+### API Endpoints
+
+```
+POST /api/public/chat/{public_id}/stream     # SSE streaming chat
+GET  /api/public/chat/{public_id}/config     # Widget configuration
+GET  /api/public/chat/{public_id}/history    # Conversation history
+GET  /api/usage/agent/{id}/status            # Usage limits check
+POST /api/knowledge/{kb_id}/upload           # Upload documents
+POST /api/knowledge/{kb_id}/search           # Vector similarity search
+```
+
+### Embeddable Widget
+
+One-line embed for any website:
+```html
+<script src="https://chat.mragame.com/widget.js" data-agent="ag_XXXXX"></script>
+```
+
+Widget source: `/projects/mragame/widget/chat-champ.ts` (11.4kb minified)
+
+### Vector Embeddings
+
+Uses pgvector with IVFFlat indexing:
+- Model: OpenAI `text-embedding-3-small` (1536 dimensions)
+- Similarity: Cosine distance
+- Chunk size: 500 tokens with 50 token overlap

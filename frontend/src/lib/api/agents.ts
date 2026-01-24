@@ -198,6 +198,7 @@ export interface EmbedSettings {
   greeting_message: string;
   button_text: string;
   production_url?: string; // Production URL for embed code generation
+  autostart?: boolean; // Auto-start voice agent when widget opens
 }
 
 export interface EmbedSettingsResponse {

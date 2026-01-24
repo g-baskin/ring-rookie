@@ -26,16 +26,20 @@ from app.api import (
     auth,
     calls,
     campaigns,
+    chat,
     compliance,
+    conversations,
     crm,
     embed,
     health,
     integrations,
+    knowledge_base,
     phone_numbers,
     realtime,
     telephony,
     telephony_ws,
     tools,
+    usage,
     workspaces,
 )
 from app.api import settings as settings_api
@@ -210,6 +214,10 @@ app.include_router(compliance.router)  # Compliance API (GDPR/CCPA)
 app.include_router(integrations.router)  # Integrations API (external tools)
 app.include_router(embed.router)  # Public embed API (unauthenticated)
 app.include_router(embed.ws_router)  # Public embed WebSocket
+app.include_router(chat.router)  # Public text chat API (unauthenticated)
+app.include_router(knowledge_base.router)  # Knowledge base management (Chat Champ)
+app.include_router(usage.router)  # Usage metering and billing (Chat Champ)
+app.include_router(conversations.router)  # Conversation history API (Chat Champ)
 
 
 @app.get("/")

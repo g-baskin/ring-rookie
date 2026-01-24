@@ -3,9 +3,9 @@
 import { useState, useMemo, useRef } from "react";
 import { useDebounce } from "use-debounce";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   History,
@@ -16,6 +16,13 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Brain,
+  BarChart3,
+  FileJson,
+  FileSpreadsheet,
+  Lightbulb,
+  AlertTriangle,
+  Target,
 } from "lucide-react";
 import {
   Table,
@@ -34,9 +41,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listCalls, type CallRecord } from "@/lib/api/calls";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  listCalls,
+  exportCalls,
+  analyzeCalls,
+  type CallRecord,
+  type CallAnalysisResponse,
+} from "@/lib/api/calls";
 import { api } from "@/lib/api";
 import { FolderOpen } from "lucide-react";
+import Link from "next/link";
 
 interface Workspace {
   id: string;
@@ -70,6 +99,14 @@ export default function CallHistoryPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
+  // Selection state
+  const [selectedCalls, setSelectedCalls] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+
+  // Analysis sheet state
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<CallAnalysisResponse | null>(null);
+
   // Fetch workspaces
   const { data: workspaces = [] } = useQuery<Workspace[]>({
     queryKey: ["workspaces"],
@@ -100,6 +137,69 @@ export default function CallHistoryPage() {
   const callsData = useMemo(() => data?.calls ?? [], [data?.calls]);
   const totalPages = data?.total_pages ?? 0;
   const totalCalls = data?.total ?? 0;
+
+  // Export mutation
+  const exportMutation = useMutation({
+    mutationFn: async (format: "csv" | "json") => {
+      const blob = await exportCalls({
+        format,
+        call_ids: selectedCalls.size > 0 ? Array.from(selectedCalls) : undefined,
+        include_transcripts: true,
+      });
+      return { blob, format };
+    },
+    onSuccess: ({ blob, format }) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `calls_export.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${selectedCalls.size || "all"} calls as ${format.toUpperCase()}`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Export failed: ${error.message}`);
+    },
+  });
+
+  // Analysis mutation
+  const analysisMutation = useMutation({
+    mutationFn: async () => {
+      return analyzeCalls({
+        call_ids: selectedCalls.size > 0 ? Array.from(selectedCalls) : undefined,
+      });
+    },
+    onSuccess: (result) => {
+      setAnalysisResult(result);
+      setAnalysisOpen(true);
+    },
+    onError: (error: Error) => {
+      toast.error(`Analysis failed: ${error.message}`);
+    },
+  });
+
+  // Selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      setSelectedCalls(new Set(filteredCalls.map((c) => c.id)));
+    } else {
+      setSelectedCalls(new Set());
+    }
+  };
+
+  const handleSelectCall = (callId: string, checked: boolean) => {
+    const newSelected = new Set(selectedCalls);
+    if (checked) {
+      newSelected.add(callId);
+    } else {
+      newSelected.delete(callId);
+    }
+    setSelectedCalls(newSelected);
+    setSelectAll(newSelected.size === filteredCalls.length && filteredCalls.length > 0);
+  };
 
   const handlePlayRecording = (call: CallRecord) => {
     if (!call.recording_url) {
@@ -255,6 +355,72 @@ export default function CallHistoryPage() {
         </div>
       </div>
 
+      {/* Action toolbar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {selectedCalls.size > 0 && (
+            <Badge variant="secondary" className="py-1">
+              {selectedCalls.size} selected
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Analytics link */}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/calls/analytics">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Analytics
+            </Link>
+          </Button>
+
+          {/* Export dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={exportMutation.isPending}>
+                {exportMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export {selectedCalls.size > 0 ? `(${selectedCalls.size})` : "All"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportMutation.mutate("csv")}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportMutation.mutate("json")}>
+                <FileJson className="mr-2 h-4 w-4" />
+                Export as JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Analyze button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => analysisMutation.mutate()}
+            disabled={
+              analysisMutation.isPending || (selectedCalls.size > 0 && selectedCalls.size < 3)
+            }
+            title={
+              selectedCalls.size > 0 && selectedCalls.size < 3
+                ? "Select at least 3 calls for analysis"
+                : undefined
+            }
+          >
+            {analysisMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Brain className="mr-2 h-4 w-4" />
+            )}
+            Analyze {selectedCalls.size > 0 ? `(${selectedCalls.size})` : "All"}
+          </Button>
+        </div>
+      </div>
+
       <Card>
         <CardContent>
           {isLoading ? (
@@ -289,6 +455,13 @@ export default function CallHistoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={selectAll}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all calls"
+                      />
+                    </TableHead>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Agent</TableHead>
                     <TableHead>Direction</TableHead>
@@ -304,7 +477,18 @@ export default function CallHistoryPage() {
                       key={call.id}
                       className="cursor-pointer"
                       onClick={() => handleRowClick(call.id)}
+                      data-selected={selectedCalls.has(call.id)}
                     >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedCalls.has(call.id)}
+                          onCheckedChange={(checked) =>
+                            handleSelectCall(call.id, checked as boolean)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select call ${call.id}`}
+                        />
+                      </TableCell>
                       <TableCell className="text-sm">
                         {new Date(call.started_at).toLocaleString()}
                       </TableCell>
@@ -403,6 +587,103 @@ export default function CallHistoryPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Analysis Results Sheet */}
+      <Sheet open={analysisOpen} onOpenChange={setAnalysisOpen}>
+        <SheetContent className="w-[600px] sm:max-w-[600px]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              Call Analysis Report
+            </SheetTitle>
+            <SheetDescription>
+              {analysisResult
+                ? `Analyzed ${analysisResult.total_calls_analyzed} calls (${formatDuration(analysisResult.total_duration_seconds)} total)`
+                : "AI-powered insights to improve your voice agent"}
+            </SheetDescription>
+          </SheetHeader>
+
+          {analysisResult && (
+            <ScrollArea className="h-[calc(100vh-140px)] pr-4">
+              <div className="mt-6 space-y-6">
+                {/* Patterns Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Target className="h-4 w-4 text-blue-500" />
+                      Patterns Found
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {analysisResult.patterns.map((pattern, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                          {pattern}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                {/* Issues Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      Issues Identified
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {analysisResult.issues.map((issue, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                          {issue}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                {/* Suggestions Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Lightbulb className="h-4 w-4 text-emerald-500" />
+                      Suggestions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {analysisResult.suggestions.map((suggestion, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                          {suggestion}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                {/* Sample Improvements Section */}
+                {analysisResult.sample_improvements && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Suggested Prompt Changes</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">
+                        {analysisResult.sample_improvements}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

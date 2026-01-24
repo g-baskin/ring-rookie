@@ -2,7 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Check, Code, ExternalLink, Settings, Globe, AlertCircle } from "lucide-react";
+import {
+  Copy,
+  Check,
+  Code,
+  ExternalLink,
+  Settings,
+  Globe,
+  AlertCircle,
+  Volume2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -22,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
@@ -66,6 +76,7 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
   const [isSaving, setIsSaving] = useState(false);
   const [productionUrl, setProductionUrl] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [autostart, setAutostart] = useState(true);
 
   // Fetch embed settings
   const { data: embedSettings, isLoading } = useQuery<EmbedSettings>({
@@ -83,6 +94,7 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
       const settings = embedSettings.embed_settings as {
         button_text?: string;
         production_url?: string;
+        autostart?: boolean;
       };
       if (settings.button_text) {
         setButtonText(settings.button_text);
@@ -90,6 +102,8 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
       if (settings.production_url) {
         setProductionUrl(settings.production_url);
       }
+      // Default to true if not explicitly set to false
+      setAutostart(settings.autostart !== false);
     }
   }, [embedSettings]);
 
@@ -125,6 +139,24 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
     }
   };
 
+  // Save autostart setting
+  const saveAutostart = async (enabled: boolean) => {
+    setAutostart(enabled);
+    setIsSaving(true);
+    try {
+      await updateEmbedSettings(agent.id, {
+        embed_settings: { autostart: enabled },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["agent-embed", agent.id] });
+      toast.success(enabled ? "Auto-start enabled" : "Auto-start disabled");
+    } catch {
+      toast.error("Failed to save auto-start setting");
+      setAutostart(!enabled); // Revert on error
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Reset states when dialog closes
   useEffect(() => {
     if (!open) {
@@ -152,6 +184,7 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
   agent-id="${embedSettings.public_id}"
   position="${position}"
   theme="${theme}"
+  autostart="${autostart ? "true" : "false"}"
 ></voice-agent>`;
   };
 
@@ -159,7 +192,7 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
     if (!embedSettings) return "";
     const baseUrl = getBaseUrl();
     return `<iframe
-  src="${baseUrl}/embed/${embedSettings.public_id}?position=${position}&theme=${theme}"
+  src="${baseUrl}/embed/${embedSettings.public_id}?position=${position}&theme=${theme}&autostart=${autostart}"
   allow="microphone"
   style="position:fixed;${position.includes("bottom") ? "bottom:0;" : "top:0;"}${position.includes("right") ? "right:0;" : "left:0;"}width:300px;height:120px;border:none;z-index:9999;"
 ></iframe>`;
@@ -258,6 +291,28 @@ export function EmbedAgentDialog({ open, onOpenChange, agent }: EmbedAgentDialog
                   {isSaving ? "..." : "Save"}
                 </Button>
               </div>
+            </div>
+
+            {/* Auto-start Voice Setting */}
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-3">
+                <Volume2 className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <Label htmlFor="autostart" className="cursor-pointer font-medium">
+                    Auto-start voice agent
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, the voice assistant starts speaking automatically when the widget
+                    opens
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="autostart"
+                checked={autostart}
+                onCheckedChange={(checked) => void saveAutostart(checked)}
+                disabled={isSaving}
+              />
             </div>
 
             <Tabs defaultValue="script" className="w-full">

@@ -30,6 +30,8 @@ import {
   PanelLeft,
   LogOut,
   Key,
+  BarChart3,
+  MessageSquare,
 } from "lucide-react";
 import { useSidebarStore } from "@/lib/sidebar-store";
 import { useAuth } from "@/hooks/use-auth";
@@ -88,6 +90,24 @@ const navigation = [
     href: "/dashboard/calls",
     icon: History,
     color: "text-orange-400",
+  },
+  {
+    name: "Call Analytics",
+    href: "/dashboard/calls/analytics",
+    icon: BarChart3,
+    color: "text-teal-400",
+  },
+  {
+    name: "Chat History",
+    href: "/dashboard/conversations",
+    icon: MessageSquare,
+    color: "text-indigo-400",
+  },
+  {
+    name: "Chat Analytics",
+    href: "/dashboard/conversations/analytics",
+    icon: BarChart3,
+    color: "text-purple-400",
   },
   {
     name: "Test Agent",
