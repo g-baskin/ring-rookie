@@ -14,6 +14,7 @@ interface AgentConfig {
   primary_color: string;
   language: string;
   voice: string;
+  autostart: boolean;
 }
 
 interface ToolDefinition {
@@ -64,13 +65,20 @@ type TranscriptEntry = {
 // Number of bars in the audio visualizer
 const BAR_COUNT = 24;
 
+// Session persistence timeout (30 minutes)
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+// Dismissal state timeout (session-based, resets on browser close)
+const DISMISSAL_STORAGE_KEY = "voice-agent-dismissed";
+
 export default function EmbedPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const publicId = params.publicId as string;
   const theme = (searchParams.get("theme") as "light" | "dark" | "auto") ?? "auto";
   const position = searchParams.get("position") ?? "bottom-right";
-  const autostart = searchParams.get("autostart") === "true";
+  // URL parameter can override agent config, but if not specified, use agent config
+  const autostartParam = searchParams.get("autostart");
 
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -80,6 +88,8 @@ export default function EmbedPage() {
   const [agentState, setAgentState] = useState<AgentState>("idle");
   const [frequencies, setFrequencies] = useState<number[]>(new Array(BAR_COUNT).fill(0));
   const [smoothedLevel, setSmoothedLevel] = useState(0);
+  const [hasResumableSession, setHasResumableSession] = useState(false);
+  const [userDismissed, setUserDismissed] = useState(false);
 
   // WebRTC resource refs for proper cleanup
   const webrtcRef = useRef<WebRTCResources>({
@@ -109,6 +119,12 @@ export default function EmbedPage() {
   // Autostart tracking (prevent multiple starts)
   const autostartTriggeredRef = useRef(false);
 
+  // Session persistence key for localStorage
+  const sessionStorageKey = `voice-session-${publicId}`;
+
+  // Dismissal persistence key for sessionStorage (per agent)
+  const dismissalStorageKey = `${DISMISSAL_STORAGE_KEY}-${publicId}`;
+
   // Detect system theme
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
@@ -123,6 +139,18 @@ export default function EmbedPage() {
     setResolvedTheme(theme);
     return undefined;
   }, [theme]);
+
+  // Check for dismissal state on mount (persists across page navigations)
+  useEffect(() => {
+    try {
+      const dismissed = sessionStorage.getItem(dismissalStorageKey);
+      if (dismissed === "true") {
+        setUserDismissed(true);
+      }
+    } catch {
+      // sessionStorage might not be available
+    }
+  }, [dismissalStorageKey]);
 
   // Notify parent window of state changes (for widget button)
   useEffect(() => {
@@ -254,6 +282,71 @@ export default function EmbedPage() {
     setSmoothedLevel(0);
   }, []);
 
+  // Save session to localStorage for persistence across navigation
+  const saveSessionToStorage = useCallback(() => {
+    if (!sessionIdRef.current) return;
+
+    const sessionData = {
+      sessionId: sessionIdRef.current,
+      agentId: publicId,
+      startedAt: sessionStartTimeRef.current,
+      transcript: transcriptRef.current,
+    };
+
+    try {
+      localStorage.setItem(sessionStorageKey, JSON.stringify(sessionData));
+    } catch {
+      // localStorage might be full or disabled
+    }
+  }, [publicId, sessionStorageKey]);
+
+  // Clear session from localStorage
+  const clearSessionStorage = useCallback(() => {
+    try {
+      localStorage.removeItem(sessionStorageKey);
+    } catch {
+      // Ignore errors
+    }
+  }, [sessionStorageKey]);
+
+  // Check for existing session on mount and load if valid
+  const loadStoredSession = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(sessionStorageKey);
+      if (!stored) return null;
+
+      const session = JSON.parse(stored);
+
+      // Validate the session
+      const isValid =
+        session.agentId === publicId &&
+        session.startedAt &&
+        Date.now() - session.startedAt < SESSION_TIMEOUT_MS;
+
+      if (isValid) {
+        return session;
+      }
+
+      // Session expired or invalid, clear it
+      clearSessionStorage();
+      return null;
+    } catch {
+      return null;
+    }
+  }, [publicId, sessionStorageKey, clearSessionStorage]);
+
+  // Check for resumable session on mount
+  useEffect(() => {
+    const storedSession = loadStoredSession();
+    if (storedSession) {
+      // Restore session data
+      sessionIdRef.current = storedSession.sessionId;
+      sessionStartTimeRef.current = storedSession.startedAt;
+      transcriptRef.current = storedSession.transcript ?? [];
+      setHasResumableSession(true);
+    }
+  }, [loadStoredSession]);
+
   // Save transcript to backend
   const saveTranscript = useCallback(async () => {
     // Flush any remaining assistant text
@@ -371,6 +464,17 @@ export default function EmbedPage() {
     // Save transcript before cleanup (fire and forget)
     void saveTranscript();
 
+    // Clear stored session
+    clearSessionStorage();
+
+    // Mark as user-dismissed to prevent auto-restart on page navigation
+    try {
+      sessionStorage.setItem(dismissalStorageKey, "true");
+      setUserDismissed(true);
+    } catch {
+      // sessionStorage might not be available
+    }
+
     cleanup();
     setStatus("idle");
     setIsExpanded(false);
@@ -379,7 +483,7 @@ export default function EmbedPage() {
     if (window.parent !== window) {
       window.parent.postMessage({ type: "voice-agent:close" }, "*");
     }
-  }, [cleanup, saveTranscript]);
+  }, [cleanup, saveTranscript, clearSessionStorage, dismissalStorageKey]);
 
   // Start voice session using manual WebRTC
   const startSession = useCallback(async () => {
@@ -399,6 +503,15 @@ export default function EmbedPage() {
     setError(null);
     setIsExpanded(true);
     setAgentState("idle");
+    setHasResumableSession(false);
+
+    // Clear any previous dismissal state since user is explicitly starting
+    try {
+      sessionStorage.removeItem(dismissalStorageKey);
+      setUserDismissed(false);
+    } catch {
+      // sessionStorage might not be available
+    }
 
     try {
       // Get ephemeral token from backend
@@ -517,6 +630,9 @@ export default function EmbedPage() {
         if (abortController.signal.aborted) return;
         setStatus("connected");
         setAgentState("listening");
+
+        // Save session to localStorage for persistence
+        saveSessionToStorage();
 
         // Build session config with tools
         const sessionConfig: Record<string, unknown> = {
@@ -658,6 +774,8 @@ export default function EmbedPage() {
             const userText = data.transcript as string;
             if (userText?.trim()) {
               transcriptRef.current.push({ role: "user", content: userText.trim() });
+              // Save to localStorage for persistence
+              saveSessionToStorage();
             }
           } else if (data.type === "response.audio_transcript.delta") {
             // Assistant speech transcript delta
@@ -672,6 +790,8 @@ export default function EmbedPage() {
                 role: "assistant",
                 content: currentAssistantTextRef.current.trim(),
               });
+              // Save to localStorage for persistence
+              saveSessionToStorage();
             }
             currentAssistantTextRef.current = "";
           }
@@ -707,26 +827,34 @@ export default function EmbedPage() {
       setStatus("error");
       cleanup();
     }
-  }, [config, publicId, cleanup, setupAudioAnalysis, endSession]);
+  }, [config, publicId, cleanup, setupAudioAnalysis, endSession, saveSessionToStorage, dismissalStorageKey]);
 
-  // Auto-start session when in widget mode
+  // Determine autostart value: URL parameter overrides agent config
+  // If URL param is explicitly set, use that; otherwise use agent config
+  const autostart =
+    autostartParam !== null ? autostartParam === "true" : (config?.autostart ?? true);
+
+  // Auto-start session when in widget mode (but not if user previously dismissed)
   useEffect(() => {
-    if (autostart && config && !autostartTriggeredRef.current) {
+    if (autostart && config && !autostartTriggeredRef.current && !userDismissed) {
       autostartTriggeredRef.current = true;
       void startSession();
     }
-  }, [autostart, config, startSession]);
+  }, [autostart, config, startSession, userDismissed]);
 
-  // Listen for start message from widget (for restart after close)
+  // Listen for messages from widget (start/dismiss)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "voice-agent:start" && status === "idle" && config) {
         void startSession();
+      } else if (event.data?.type === "voice-agent:dismiss") {
+        // Widget is being dismissed - end session and save dismissal state
+        endSession();
       }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [status, config, startSession]);
+  }, [status, config, startSession, endSession]);
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -985,7 +1113,9 @@ export default function EmbedPage() {
           </div>
 
           {/* Button text */}
-          <span className="relative z-10 text-sm font-semibold">{config.button_text}</span>
+          <span className="relative z-10 text-sm font-semibold">
+            {hasResumableSession ? "Continue Chat" : config.button_text}
+          </span>
         </button>
       )}
 

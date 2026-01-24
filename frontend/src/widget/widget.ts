@@ -190,6 +190,40 @@ const styles = `
     text-decoration: none;
   }
 
+  .va-widget-dismiss {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #6b7280;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+    z-index: 10;
+  }
+
+  .va-widget-button-wrapper:hover .va-widget-dismiss {
+    opacity: 1;
+  }
+
+  .va-widget-dismiss:hover {
+    background: #ef4444;
+  }
+
+  .va-widget-container.dismissed {
+    display: none;
+  }
+
   @keyframes va-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -455,8 +489,12 @@ class VoiceAgentElement extends HTMLElement {
   private baseUrl: string = "";
   private primaryColor: string = "#6366f1";
   private widgetStyle: WidgetStyle = "default";
+  private autostartSet: boolean = false; // Track if autostart was explicitly set
+  private autostart: boolean = true;
   private currentState: AgentState = "idle";
   private messageHandler: ((event: MessageEvent) => void) | null = null;
+  private isDismissed: boolean = false;
+  private dismissStorageKey: string = "";
 
   constructor() {
     super();
@@ -472,6 +510,7 @@ class VoiceAgentElement extends HTMLElement {
       "base-url",
       "primary-color",
       "widget-style",
+      "autostart",
     ];
   }
 
@@ -500,6 +539,10 @@ class VoiceAgentElement extends HTMLElement {
           this.widgetStyle = newValue;
         }
         break;
+      case "autostart":
+        this.autostartSet = true;
+        this.autostart = newValue !== "false";
+        break;
     }
     if (this.isConnected) {
       this.render();
@@ -515,6 +558,18 @@ class VoiceAgentElement extends HTMLElement {
     this.baseUrl = this.getAttribute("base-url") ?? this.detectBaseUrl();
     this.primaryColor = this.getAttribute("primary-color") ?? "#6366f1";
     this.widgetStyle = this.detectStyle();
+    // Only set autostartSet if the attribute was explicitly provided
+    const autostartAttr = this.getAttribute("autostart");
+    this.autostartSet = autostartAttr !== null;
+    this.autostart = autostartAttr !== "false";
+
+    // Set up dismiss storage key and check for previous dismissal
+    this.dismissStorageKey = `voice-agent-widget-dismissed-${this.agentId}`;
+    try {
+      this.isDismissed = sessionStorage.getItem(this.dismissStorageKey) === "true";
+    } catch {
+      // sessionStorage might not be available
+    }
 
     this.render();
 
@@ -627,15 +682,16 @@ class VoiceAgentElement extends HTMLElement {
         }
         ${customStyles}
       </style>
-      <div class="va-widget-container ${this.position} ${containerThemeClass}">
+      <div class="va-widget-container ${this.position} ${containerThemeClass}${this.isDismissed ? " dismissed" : ""}" id="container">
         <div class="va-widget-popup" id="popup">
           <iframe
-            src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}&autostart=true"
+            src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}${this.autostartSet ? `&autostart=${this.autostart}` : ""}"
             allow="microphone"
             title="Voice Agent"
           ></iframe>
         </div>
-        <div class="va-widget-button-wrapper">
+        <div class="va-widget-button-wrapper" style="position: relative;">
+          <button class="va-widget-dismiss" id="dismiss" title="Hide voice assistant">×</button>
           <button class="va-widget-button ${themeClass}" id="toggle">
             <div class="va-widget-orb" id="orb">
               <div class="va-widget-orb-gradient" id="orb-gradient"></div>
@@ -653,6 +709,36 @@ class VoiceAgentElement extends HTMLElement {
 
     // Add event listeners
     this.shadow.getElementById("toggle")?.addEventListener("click", () => this.toggle());
+    this.shadow.getElementById("dismiss")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.dismiss();
+    });
+  }
+
+  private dismiss() {
+    // Close the popup if open
+    if (this.isOpen) {
+      const popup = this.shadow.getElementById("popup");
+      const iframe = popup?.querySelector("iframe");
+      if (iframe?.contentWindow) {
+        // Notify iframe to end session (triggers dismissal state in embed)
+        iframe.contentWindow.postMessage({ type: "voice-agent:dismiss" }, "*");
+      }
+    }
+
+    // Hide the widget container
+    const container = this.shadow.getElementById("container");
+    if (container) {
+      container.classList.add("dismissed");
+    }
+
+    // Save dismissed state to sessionStorage
+    this.isDismissed = true;
+    try {
+      sessionStorage.setItem(this.dismissStorageKey, "true");
+    } catch {
+      // sessionStorage might not be available
+    }
   }
 
   private toggle() {
