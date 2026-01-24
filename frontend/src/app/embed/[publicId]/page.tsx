@@ -428,6 +428,9 @@ export default function EmbedPage() {
 
     if (audioElement) {
       try {
+        // Immediately stop audio playback
+        audioElement.pause();
+        audioElement.currentTime = 0;
         audioElement.srcObject = null;
         audioElement.remove();
       } catch {
