@@ -220,9 +220,7 @@ const styles = `
     background: #ef4444;
   }
 
-  .va-widget-container.dismissed {
-    display: none;
-  }
+  /* Dismissed state - widget stays visible but won't auto-open */
 
   @keyframes va-spin {
     from { transform: rotate(0deg); }
@@ -682,7 +680,7 @@ class VoiceAgentElement extends HTMLElement {
         }
         ${customStyles}
       </style>
-      <div class="va-widget-container ${this.position} ${containerThemeClass}${this.isDismissed ? " dismissed" : ""}" id="container">
+      <div class="va-widget-container ${this.position} ${containerThemeClass}" id="container">
         <div class="va-widget-popup" id="popup">
           <iframe
             src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}${this.autostartSet ? `&autostart=${this.autostart}` : ""}"
@@ -716,7 +714,7 @@ class VoiceAgentElement extends HTMLElement {
   }
 
   private dismiss() {
-    // Close the popup if open
+    // Close the popup if open and end the session
     if (this.isOpen) {
       const popup = this.shadow.getElementById("popup");
       const iframe = popup?.querySelector("iframe");
@@ -724,15 +722,11 @@ class VoiceAgentElement extends HTMLElement {
         // Notify iframe to end session (triggers dismissal state in embed)
         iframe.contentWindow.postMessage({ type: "voice-agent:dismiss" }, "*");
       }
+      // Close the popup
+      this.toggle();
     }
 
-    // Hide the widget container
-    const container = this.shadow.getElementById("container");
-    if (container) {
-      container.classList.add("dismissed");
-    }
-
-    // Save dismissed state to sessionStorage
+    // Save dismissed state to sessionStorage (prevents auto-restart on navigation)
     this.isDismissed = true;
     try {
       sessionStorage.setItem(this.dismissStorageKey, "true");
