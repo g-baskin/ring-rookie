@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -53,7 +54,7 @@ class Conversation(Base):
 
     # Conversation metadata
     visitor_metadata: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSONB().with_variant(JSON, "sqlite"),
         nullable=False,
         default=dict,
         comment="Visitor info: user_agent, ip_hash, referrer, etc.",
@@ -177,7 +178,7 @@ class Message(Base):
         comment="Model used for this message (e.g., gpt-4o-mini)",
     )
     extra_data: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSONB().with_variant(JSON, "sqlite"),
         nullable=False,
         default=dict,
         comment="Additional metadata: tool_calls, latency_ms, etc.",

@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.6
+    hooks:
+      - id: ruff-check
+        args: [--config, backend/pyproject.toml]
+        files: ^backend/.*\.py$
+      - id: ruff-format
+        args: [--config, backend/pyproject.toml, --check]
+        files: ^backend/.*\.py$
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: frontend-check
+        name: frontend lint, types and format
+        entry: bash -c 'cd frontend && npm run check'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: env-drift
+        entry: python3 scripts/check_env_drift.py
+        language: system
+        pass_filenames: false

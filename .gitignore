@@ -45,6 +45,7 @@ venv.bak/
 htmlcov/
 .scan-output/
 reports/scan-output/
+.audit/
 .tox/
 .mypy_cache/
 .dmypy.json

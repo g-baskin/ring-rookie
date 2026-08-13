@@ -4,7 +4,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import inspect, pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -43,8 +43,22 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _ensure_version_column_capacity(connection: Connection) -> None:
+    """Allow descriptive revision IDs beyond Alembic's 32-character default."""
+    if not inspect(connection).has_table("alembic_version"):
+        connection.execute(
+            text("CREATE TABLE alembic_version (version_num VARCHAR(255) NOT NULL PRIMARY KEY)")
+        )
+    elif connection.dialect.name == "postgresql":
+        connection.execute(
+            text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
+        )
+
+
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
+    _ensure_version_column_capacity(connection)
+    connection.commit()
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
