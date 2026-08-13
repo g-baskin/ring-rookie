@@ -1,6 +1,7 @@
-.PHONY: help install dev stop dev-up dev-watch dev-status dev-logs dev-restart dev-down dev-smoke clean reset-database test lint format migrate check backend-ci frontend-ci migration-check security-check dependency-check env-check ci
+.PHONY: help install dev stop dev-up dev-watch dev-status dev-logs dev-restart dev-down dev-smoke verify-backend verify-frontend verify-compose verify-hot-reload verify-recovery verify-persistence clean reset-database test lint format migrate check backend-ci frontend-ci migration-check security-check dependency-check env-check ci
 help:
 	@echo "Development: dev-up dev-watch dev-status dev-logs dev-restart dev-down dev-smoke"
+	@echo "Verification: verify-backend verify-frontend verify-compose verify-hot-reload verify-recovery verify-persistence"
 	@echo "CI: backend-ci frontend-ci migration-check security-check dependency-check env-check ci"
 	@echo "Maintenance: clean (artifacts only), reset-database CONFIRM_RESET=yes (destructive)"
 install:
@@ -22,6 +23,18 @@ dev-down:
 	docker compose down
 dev-smoke:
 	python3 scripts/smoke_stack.py
+verify-backend:
+	python3 scripts/verify_backend_ci.py
+verify-frontend:
+	python3 scripts/verify_frontend_ci.py
+verify-compose:
+	python3 scripts/verify_compose.py
+verify-hot-reload:
+	python3 scripts/verify_hot_reload.py
+verify-recovery:
+	python3 scripts/verify_recovery.py
+verify-persistence:
+	python3 scripts/verify_persistence.py
 clean:
 	rm -rf backend/.mypy_cache backend/.pytest_cache backend/.ruff_cache frontend/.next frontend/.next-dev frontend/.next-build frontend/coverage
 reset-database:
