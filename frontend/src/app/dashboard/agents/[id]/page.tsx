@@ -71,6 +71,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PROMPT_CHARACTER_TARGET,
+  isPromptOverTarget,
+  PromptCharacterTargetField,
+} from "./prompt-character-target";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 // Best practices system prompt template based on OpenAI's 2025 GPT Realtime guidelines
@@ -1232,9 +1237,11 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                     name="systemPrompt"
                     render={({ field }) => {
                       const charCount = field.value?.length ?? 0;
-                      const target = form.watch("systemPromptCharacterTarget") ?? 5000;
+                      const target =
+                        form.watch("systemPromptCharacterTarget") ??
+                        DEFAULT_PROMPT_CHARACTER_TARGET;
                       const isTooShort = charCount > 0 && charCount < 100;
-                      const isTooLong = charCount > target;
+                      const isTooLong = isPromptOverTarget(charCount, target);
                       return (
                         <FormItem>
                           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -1264,47 +1271,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                   <FormField
                     control={form.control}
                     name="systemPromptCharacterTarget"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel htmlFor="system-prompt-character-target">
-                          Recommended prompt-length target
-                        </FormLabel>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                          <FormControl>
-                            <Input
-                              id="system-prompt-character-target"
-                              type="number"
-                              min={1000}
-                              max={20000}
-                              step={1}
-                              value={field.value}
-                              onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                              onBlur={(event) => {
-                                const value = Number(event.target.value);
-                                field.onChange(
-                                  Math.min(20000, Math.max(1000, Math.round(value || 5000)))
-                                );
-                                field.onBlur();
-                              }}
-                              className="w-full sm:w-32"
-                            />
-                          </FormControl>
-                          <Slider
-                            aria-label="Recommended prompt-length target"
-                            min={1000}
-                            max={20000}
-                            step={100}
-                            value={[field.value ?? 5000]}
-                            onValueChange={(value) => field.onChange(value[0])}
-                            className="flex-1"
-                          />
-                        </div>
-                        <FormDescription>
-                          A recommended system-prompt length, not the model output max tokens.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => <PromptCharacterTargetField field={field} />}
                   />
 
                   <FormField
