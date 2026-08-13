@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -22,6 +22,7 @@ class WorkerItem(TimestampMixin, Base):
     __tablename__ = "worker_items"
     __table_args__ = (
         UniqueConstraint("scope_key", "namespace", "item_digest", name="uq_worker_item_identity"),
+        Index("ix_worker_items_claim", "namespace", "status", "available_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
