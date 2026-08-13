@@ -69,6 +69,8 @@ type PhoneNumber = {
   id: string;
   phoneNumber: string;
   provider: string;
+  connectionName?: string | null;
+  capabilities: Record<string, boolean>;
   agentId?: string;
   agentName?: string;
   workspaceId?: string;
@@ -106,21 +108,15 @@ export default function PhoneNumbersPage() {
   const [numberToRelease, setNumberToRelease] = useState<PhoneNumber | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
 
-  // Load phone numbers and agents on mount
+  // Pull the selected scope directly from Telnyx/Twilio when it changes.
   useEffect(() => {
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedWorkspaceId]);
 
-  // Get the active workspace ID for API calls
-  const getActiveWorkspaceId = (): string | null => {
-    if (selectedWorkspaceId !== "all") {
-      return selectedWorkspaceId;
-    }
-    // Use default workspace or first workspace
-    const defaultWs = workspaces.find((ws) => ws.is_default);
-    return defaultWs?.id ?? workspaces[0]?.id ?? null;
-  };
+  // Keep provider mutations in the same account/workspace scope as the list.
+  const getActiveWorkspaceId = (): string | undefined =>
+    selectedWorkspaceId === "all" ? undefined : selectedWorkspaceId;
 
   const loadData = async () => {
     setIsLoading(true);
@@ -142,20 +138,11 @@ export default function PhoneNumbersPage() {
       const agentsData = agentsList.status === "fulfilled" ? agentsList.value : [];
       setAgents(agentsData);
 
-      // Determine which workspace to use for phone number queries
-      const defaultWs = loadedWorkspaces.find((ws) => ws.is_default);
-      const workspaceId =
-        selectedWorkspaceId !== "all"
-          ? selectedWorkspaceId
-          : (defaultWs?.id ?? loadedWorkspaces[0]?.id);
+      // "All Workspaces" uses account-level credentials; a selected workspace
+      // uses only credentials stored for that workspace.
+      const workspaceId = selectedWorkspaceId === "all" ? undefined : selectedWorkspaceId;
 
-      if (!workspaceId) {
-        // No workspaces available
-        setPhoneNumbers([]);
-        return;
-      }
-
-      // Load phone numbers from both providers
+      // Load phone numbers live from both provider accounts
       const [telnyxNumbers, twilioNumbers] = await Promise.allSettled([
         listPhoneNumbers("telnyx", workspaceId),
         listPhoneNumbers("twilio", workspaceId),
@@ -170,6 +157,8 @@ export default function PhoneNumbersPage() {
             id: n.id,
             phoneNumber: n.phone_number,
             provider: "telnyx",
+            connectionName: n.friendly_name,
+            capabilities: n.capabilities ?? {},
             agentId: n.assigned_agent_id ?? undefined,
             isActive: true,
           }))
@@ -183,6 +172,8 @@ export default function PhoneNumbersPage() {
             id: n.id,
             phoneNumber: n.phone_number,
             provider: "twilio",
+            connectionName: n.friendly_name,
+            capabilities: n.capabilities ?? {},
             agentId: n.assigned_agent_id ?? undefined,
             isActive: true,
           }))
@@ -228,11 +219,6 @@ export default function PhoneNumbersPage() {
     }
 
     const workspaceId = getActiveWorkspaceId();
-    if (!workspaceId) {
-      toast.error("No workspace available. Please create a workspace first.");
-      return;
-    }
-
     setIsSearching(true);
     try {
       const numbers = await searchPhoneNumbers(
@@ -269,11 +255,6 @@ export default function PhoneNumbersPage() {
     }
 
     const workspaceId = getActiveWorkspaceId();
-    if (!workspaceId) {
-      toast.error("No workspace available. Please create a workspace first.");
-      return;
-    }
-
     setIsPurchasing(true);
     try {
       await purchasePhoneNumber(
@@ -336,11 +317,6 @@ export default function PhoneNumbersPage() {
     if (!numberToRelease) return;
 
     const workspaceId = getActiveWorkspaceId();
-    if (!workspaceId) {
-      toast.error("No workspace available.");
-      return;
-    }
-
     try {
       await releasePhoneNumber(
         numberToRelease.id,
@@ -432,18 +408,17 @@ export default function PhoneNumbersPage() {
           <CardHeader>
             <CardTitle>Your Phone Numbers</CardTitle>
             <CardDescription>
-              {phoneNumbers.length} number(s) available
-              {selectedWorkspaceId !== "all" && (
-                <span className="ml-1 text-muted-foreground">(workspace filter coming soon)</span>
-              )}
+              {phoneNumbers.length} number(s) synced from your connected provider account
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Phone Number</TableHead>
                   <TableHead>Provider</TableHead>
+                  <TableHead>Connection</TableHead>
+                  <TableHead>Capabilities</TableHead>
                   <TableHead>Assigned Agent</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[70px]"></TableHead>
@@ -457,6 +432,20 @@ export default function PhoneNumbersPage() {
                       <Badge variant="outline" className="capitalize">
                         {number.provider}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {number.connectionName ?? <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(number.capabilities)
+                          .filter(([, enabled]) => enabled)
+                          .map(([capability]) => (
+                            <Badge key={capability} variant="secondary" className="uppercase">
+                              {capability}
+                            </Badge>
+                          ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {number.agentName ?? (

@@ -296,27 +296,24 @@ async def list_phone_numbers(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
     provider: str = Query("twilio", description="Provider: twilio or telnyx"),
-    workspace_id: str = Query(..., description="Workspace ID for API key isolation"),
+    workspace_id: str | None = Query(
+        None, description="Workspace ID; omit to use account-level API keys"
+    ),
 ) -> list[PhoneNumberResponse]:
-    """List all phone numbers for the user's account.
+    """List phone numbers directly from the provider account.
 
-    Args:
-        provider: Telephony provider (twilio or telnyx)
-        current_user: Authenticated user
-        db: Database session
-        workspace_id: Workspace ID for workspace-specific API keys
-
-    Returns:
-        List of phone numbers
+    Omitting ``workspace_id`` uses account-level credentials. Supplying it uses
+    credentials isolated to that workspace.
     """
     log = logger.bind(user_id=current_user.id, provider=provider, workspace_id=workspace_id)
     log.info("listing_phone_numbers")
 
-    # Parse workspace_id
-    try:
-        workspace_uuid = uuid.UUID(workspace_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
+    workspace_uuid: uuid.UUID | None = None
+    if workspace_id:
+        try:
+            workspace_uuid = uuid.UUID(workspace_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
 
     numbers: list[PhoneNumber] = []
 
@@ -356,27 +353,20 @@ async def search_phone_numbers(
     request: SearchPhoneNumbersRequest,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    workspace_id: str = Query(..., description="Workspace ID for API key isolation"),
+    workspace_id: str | None = Query(
+        None, description="Workspace ID; omit to use account-level API keys"
+    ),
 ) -> list[PhoneNumberResponse]:
-    """Search for available phone numbers to purchase.
-
-    Args:
-        request: Search parameters
-        current_user: Authenticated user
-        db: Database session
-        workspace_id: Workspace ID for workspace-specific API keys
-
-    Returns:
-        List of available phone numbers
-    """
+    """Search the selected provider account for available phone numbers."""
     log = logger.bind(user_id=current_user.id, provider=request.provider, workspace_id=workspace_id)
     log.info("searching_phone_numbers", country=request.country, area_code=request.area_code)
 
-    # Parse workspace_id
-    try:
-        workspace_uuid = uuid.UUID(workspace_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
+    workspace_uuid: uuid.UUID | None = None
+    if workspace_id:
+        try:
+            workspace_uuid = uuid.UUID(workspace_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
 
     numbers: list[PhoneNumber] = []
 
@@ -452,30 +442,22 @@ async def purchase_phone_number(
     request: Request,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    workspace_id: str = Query(..., description="Workspace ID for API key isolation"),
+    workspace_id: str | None = Query(
+        None, description="Workspace ID; omit to use account-level API keys"
+    ),
 ) -> PhoneNumberResponse:
-    """Purchase a phone number.
-
-    Args:
-        purchase_request: Purchase request with provider and phone number
-        request: HTTP request (for rate limiting)
-        current_user: Authenticated user
-        db: Database session
-        workspace_id: Workspace ID for workspace-specific API keys
-
-    Returns:
-        Purchased phone number details
-    """
+    """Purchase a phone number from the selected provider account."""
     log = logger.bind(
         user_id=current_user.id, provider=purchase_request.provider, workspace_id=workspace_id
     )
     log.info("purchasing_phone_number", phone_number=purchase_request.phone_number)
 
-    # Parse workspace_id
-    try:
-        workspace_uuid = uuid.UUID(workspace_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
+    workspace_uuid: uuid.UUID | None = None
+    if workspace_id:
+        try:
+            workspace_uuid = uuid.UUID(workspace_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
 
     number: PhoneNumber
 
@@ -521,28 +503,20 @@ async def release_phone_number(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
     provider: str = Query(..., description="Provider: twilio or telnyx"),
-    workspace_id: str = Query(..., description="Workspace ID for API key isolation"),
+    workspace_id: str | None = Query(
+        None, description="Workspace ID; omit to use account-level API keys"
+    ),
 ) -> dict[str, str]:
-    """Release a phone number.
-
-    Args:
-        phone_number_id: Phone number ID to release
-        provider: Telephony provider
-        current_user: Authenticated user
-        db: Database session
-        workspace_id: Workspace ID for workspace-specific API keys
-
-    Returns:
-        Success message
-    """
+    """Release a phone number from the selected provider account."""
     log = logger.bind(user_id=current_user.id, provider=provider, workspace_id=workspace_id)
     log.info("releasing_phone_number", phone_number_id=phone_number_id)
 
-    # Parse workspace_id
-    try:
-        workspace_uuid = uuid.UUID(workspace_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
+    workspace_uuid: uuid.UUID | None = None
+    if workspace_id:
+        try:
+            workspace_uuid = uuid.UUID(workspace_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
 
     success = False
 

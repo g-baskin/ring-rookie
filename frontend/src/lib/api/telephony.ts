@@ -93,10 +93,13 @@ export interface CallResponse {
  */
 export async function listPhoneNumbers(
   provider: Provider,
-  workspaceId: string
+  workspaceId?: string
 ): Promise<PhoneNumber[]> {
+  const query = new URLSearchParams({ provider });
+  if (workspaceId) query.set("workspace_id", workspaceId);
+
   const response = await fetchWithTimeout(
-    `${API_BASE}/api/v1/telephony/phone-numbers?provider=${provider}&workspace_id=${workspaceId}`
+    `${API_BASE}/api/v1/telephony/phone-numbers?${query.toString()}`
   );
 
   if (!response.ok) {
@@ -116,10 +119,14 @@ export async function listPhoneNumbers(
  */
 export async function searchPhoneNumbers(
   request: SearchPhoneNumbersRequest,
-  workspaceId: string
+  workspaceId?: string
 ): Promise<PhoneNumber[]> {
+  const query = new URLSearchParams();
+  if (workspaceId) query.set("workspace_id", workspaceId);
+  const queryString = query.size > 0 ? `?${query.toString()}` : "";
+
   const response = await fetchWithTimeout(
-    `${API_BASE}/api/v1/telephony/phone-numbers/search?workspace_id=${workspaceId}`,
+    `${API_BASE}/api/v1/telephony/phone-numbers/search${queryString}`,
     {
       method: "POST",
       headers: {
@@ -148,10 +155,14 @@ export async function searchPhoneNumbers(
  */
 export async function purchasePhoneNumber(
   request: PurchasePhoneNumberRequest,
-  workspaceId: string
+  workspaceId?: string
 ): Promise<PhoneNumber> {
+  const query = new URLSearchParams();
+  if (workspaceId) query.set("workspace_id", workspaceId);
+  const queryString = query.size > 0 ? `?${query.toString()}` : "";
+
   const response = await fetchWithTimeout(
-    `${API_BASE}/api/v1/telephony/phone-numbers/purchase?workspace_id=${workspaceId}`,
+    `${API_BASE}/api/v1/telephony/phone-numbers/purchase${queryString}`,
     {
       method: "POST",
       headers: {
@@ -175,10 +186,13 @@ export async function purchasePhoneNumber(
 export async function releasePhoneNumber(
   phoneNumberId: string,
   provider: Provider,
-  workspaceId: string
+  workspaceId?: string
 ): Promise<void> {
+  const query = new URLSearchParams({ provider });
+  if (workspaceId) query.set("workspace_id", workspaceId);
+
   const response = await fetchWithTimeout(
-    `${API_BASE}/api/v1/telephony/phone-numbers/${phoneNumberId}?provider=${provider}&workspace_id=${workspaceId}`,
+    `${API_BASE}/api/v1/telephony/phone-numbers/${phoneNumberId}?${query.toString()}`,
     {
       method: "DELETE",
     }
