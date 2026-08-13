@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { api } from "../api";
+import { api, resolveApiBaseUrl } from "../api";
 
 // Don't mock axios - test the actual instance
 
@@ -19,8 +19,18 @@ describe("API Client", () => {
 
   it("has correct base configuration", () => {
     // The api instance should have been created with axios.create
-    expect(api.defaults.baseURL).toBeDefined();
+    expect(api.defaults.baseURL).toBe("");
     expect(api.defaults.withCredentials).toBe(true);
+  });
+  it("routes browser localhost API calls through the same-origin proxy", () => {
+    expect(resolveApiBaseUrl("http://localhost:8000", "localhost")).toBe("");
+    expect(resolveApiBaseUrl("http://localhost:8000", "127.0.0.1")).toBe("");
+  });
+
+  it("keeps deployed API URLs explicit", () => {
+    expect(resolveApiBaseUrl("https://api.example.com", "app.example.com")).toBe(
+      "https://api.example.com"
+    );
   });
 });
 
