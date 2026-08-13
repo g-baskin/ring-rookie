@@ -1,8 +1,8 @@
 # PRD-001a: Delivery Spine
 
-> **Status:** In Work
-> **Implementation PR:** TBD
-> **Implementation commit:** TBD
+> **Status:** Completed
+> **Implementation PR:** [#2](https://github.com/Gahroot/ring-rookie/pull/2)
+> **Implementation commit:** `2ce28c6f3d42d0b84b225d973b9caca99dabf07d`
 > **Quality review:** `qa/prd-001a-quality-review.md`
 > **Priority:** P0
 > **Effort:** L (1-3d)
