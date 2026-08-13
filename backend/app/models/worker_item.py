@@ -45,3 +45,5 @@ class WorkerItem(TimestampMixin, Base):
     dead_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     replay_actor: Mapped[str | None] = mapped_column(String(100))
     replay_reason: Mapped[str | None] = mapped_column(String(255))
+    replayed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    age_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

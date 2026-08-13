@@ -1,12 +1,15 @@
 import asyncio
 
+import httpx
 import pytest
 
 from app.core.circuit_breaker import (
     AsyncCircuitBreaker,
+    CircuitBreakerRegistry,
     CircuitConfig,
     CircuitState,
     ProviderUnavailableError,
+    is_transient_provider_failure,
 )
 
 
@@ -52,3 +55,36 @@ async def test_deterministic_failure_is_excluded() -> None:
     with pytest.raises(ValueError, match="invalid request"):
         await breaker.call(invalid)
     assert breaker.state is CircuitState.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_cancellation_does_not_increment_failures() -> None:
+    breaker = AsyncCircuitBreaker("telnyx", CircuitConfig(2, 1))
+
+    async def cancelled() -> None:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await breaker.call(cancelled)
+    assert breaker.failures == 0
+    assert breaker.state is CircuitState.CLOSED
+
+
+def test_httpx_classification_and_registry_duplicates() -> None:
+    request = httpx.Request("GET", "https://provider.test")
+    assert is_transient_provider_failure(httpx.ConnectError("offline", request=request))
+    assert is_transient_provider_failure(
+        httpx.HTTPStatusError(
+            "busy", request=request, response=httpx.Response(429, request=request)
+        )
+    )
+    assert not is_transient_provider_failure(
+        httpx.HTTPStatusError(
+            "auth", request=request, response=httpx.Response(401, request=request)
+        )
+    )
+    registry = CircuitBreakerRegistry()
+    first = registry.register("telnyx", CircuitConfig(2, 1))
+    assert registry.register("telnyx", CircuitConfig(2, 1)) is first
+    with pytest.raises(ValueError, match="different"):
+        registry.register("telnyx", CircuitConfig(3, 1))

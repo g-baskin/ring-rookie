@@ -18,6 +18,8 @@ from typing import Any
 import httpx
 import structlog
 
+from app.core.circuit_breaker import provider_call
+
 # Type alias for tool handler functions
 ToolHandler = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -289,7 +291,9 @@ class GoHighLevelTools:
             client = await self._get_client()
 
             # GHL search endpoint
-            response = await client.get(
+            response = await provider_call(
+                "gohighlevel",
+                client.get,
                 "/contacts/",
                 params={
                     "locationId": self.location_id,
@@ -351,7 +355,7 @@ class GoHighLevelTools:
         """
         try:
             client = await self._get_client()
-            response = await client.get(f"/contacts/{contact_id}")
+            response = await provider_call("gohighlevel", client.get, f"/contacts/{contact_id}")
 
             if response.status_code != HTTPStatus.OK:
                 return {"success": False, "error": f"Contact not found: {response.status_code}"}
@@ -419,7 +423,7 @@ class GoHighLevelTools:
             if tags:
                 payload["tags"] = tags
 
-            response = await client.post("/contacts/", json=payload)
+            response = await provider_call("gohighlevel", client.post, "/contacts/", json=payload)
 
             if response.status_code not in (HTTPStatus.OK, HTTPStatus.CREATED):
                 self.logger.warning(
@@ -482,7 +486,9 @@ class GoHighLevelTools:
             if not payload:
                 return {"success": False, "error": "No fields to update"}
 
-            response = await client.put(f"/contacts/{contact_id}", json=payload)
+            response = await provider_call(
+                "gohighlevel", client.put, f"/contacts/{contact_id}", json=payload
+            )
 
             if response.status_code != HTTPStatus.OK:
                 return {"success": False, "error": f"Failed to update contact: {response.text}"}
@@ -510,7 +516,9 @@ class GoHighLevelTools:
         try:
             client = await self._get_client()
 
-            response = await client.post(
+            response = await provider_call(
+                "gohighlevel",
+                client.post,
                 f"/contacts/{contact_id}/tags",
                 json={"tags": tags},
             )
@@ -537,7 +545,9 @@ class GoHighLevelTools:
         """
         try:
             client = await self._get_client()
-            response = await client.get(
+            response = await provider_call(
+                "gohighlevel",
+                client.get,
                 "/calendars/",
                 params={"locationId": self.location_id},
             )
@@ -597,7 +607,9 @@ class GoHighLevelTools:
             start_ms = int(start_dt.timestamp() * 1000)
             end_ms = int(end_dt.timestamp() * 1000)
 
-            response = await client.get(
+            response = await provider_call(
+                "gohighlevel",
+                client.get,
                 f"/calendars/{calendar_id}/free-slots",
                 params={
                     "startDate": start_ms,
@@ -675,7 +687,9 @@ class GoHighLevelTools:
             if notes:
                 payload["notes"] = notes
 
-            response = await client.post("/calendars/events/appointments", json=payload)
+            response = await provider_call(
+                "gohighlevel", client.post, "/calendars/events/appointments", json=payload
+            )
 
             if response.status_code not in (HTTPStatus.OK, HTTPStatus.CREATED):
                 self.logger.warning(
@@ -711,7 +725,9 @@ class GoHighLevelTools:
         """
         try:
             client = await self._get_client()
-            response = await client.get(f"/contacts/{contact_id}/appointments")
+            response = await provider_call(
+                "gohighlevel", client.get, f"/contacts/{contact_id}/appointments"
+            )
 
             if response.status_code != HTTPStatus.OK:
                 return {
@@ -752,7 +768,9 @@ class GoHighLevelTools:
         """
         try:
             client = await self._get_client()
-            response = await client.delete(f"/calendars/events/{event_id}")
+            response = await provider_call(
+                "gohighlevel", client.delete, f"/calendars/events/{event_id}"
+            )
 
             if response.status_code not in (HTTPStatus.OK, HTTPStatus.NO_CONTENT):
                 return {"success": False, "error": f"Failed to cancel: {response.status_code}"}
@@ -775,7 +793,9 @@ class GoHighLevelTools:
         """
         try:
             client = await self._get_client()
-            response = await client.get(
+            response = await provider_call(
+                "gohighlevel",
+                client.get,
                 "/opportunities/pipelines",
                 params={"locationId": self.location_id},
             )
@@ -841,7 +861,9 @@ class GoHighLevelTools:
             if monetary_value is not None:
                 payload["monetaryValue"] = monetary_value
 
-            response = await client.post("/opportunities/", json=payload)
+            response = await provider_call(
+                "gohighlevel", client.post, "/opportunities/", json=payload
+            )
 
             if response.status_code not in (HTTPStatus.OK, HTTPStatus.CREATED):
                 return {"success": False, "error": f"Failed to create opportunity: {response.text}"}

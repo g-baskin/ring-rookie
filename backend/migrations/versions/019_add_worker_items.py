@@ -36,6 +36,8 @@ def upgrade() -> None:
         sa.Column("dead_at", sa.DateTime(timezone=True)),
         sa.Column("replay_actor", sa.String(100)),
         sa.Column("replay_reason", sa.String(255)),
+        sa.Column("replayed_at", sa.DateTime(timezone=True)),
+        sa.Column("age_started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),

@@ -6,7 +6,10 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from typing import TypeVar
+
+import httpx
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -58,7 +61,10 @@ class AsyncCircuitBreaker:
         probe = await self._admit()
         try:
             result = await operation()
-        except BaseException as exc:
+        except asyncio.CancelledError:
+            await self._cancel(probe)
+            raise
+        except Exception as exc:
             await self._finish(probe, failure=self._classifier(exc))
             raise
         await self._finish(probe, failure=False)
@@ -80,6 +86,13 @@ class AsyncCircuitBreaker:
                 self._probe_active = True
                 return True
             return False
+
+    async def _cancel(self, probe: bool) -> None:
+        """Release a cancelled probe without treating cooperative shutdown as provider failure."""
+        if probe:
+            async with self._lock:
+                self._probe_active = False
+                self._open()
 
     async def _finish(self, probe: bool, *, failure: bool) -> None:
         async with self._lock:
@@ -112,7 +125,16 @@ class AsyncCircuitBreaker:
 
 def is_transient_provider_failure(exc: BaseException) -> bool:
     """Classify SDK-neutral transport failures; adapters may supply richer classifiers."""
-    if isinstance(exc, (TimeoutError, ConnectionError, asyncio.TimeoutError)):
+    if isinstance(
+        exc,
+        (
+            TimeoutError,
+            ConnectionError,
+            asyncio.TimeoutError,
+            httpx.TimeoutException,
+            httpx.NetworkError,
+        ),
+    ):
         return True
     status = getattr(exc, "status_code", None)
     if status is None:
@@ -132,9 +154,26 @@ class CircuitBreakerRegistry:
     def register(
         self, provider: str, config: CircuitConfig = CircuitConfig()
     ) -> AsyncCircuitBreaker:
+        existing = self._breakers.get(provider)
+        if existing is not None:
+            if existing.config != config:
+                raise ValueError(f"provider {provider} already has different circuit config")
+            return existing
         breaker = AsyncCircuitBreaker(provider, config)
         self._breakers[provider] = breaker
         return breaker
 
     def get(self, provider: str) -> AsyncCircuitBreaker:
         return self._breakers[provider]
+
+
+provider_circuits = CircuitBreakerRegistry()
+for _provider in ("telnyx", "twilio", "calendly", "gohighlevel", "shopify", "sms"):
+    provider_circuits.register(_provider)
+
+
+async def provider_call[T](
+    provider: str, operation: Callable[..., Awaitable[T]], *args: object, **kwargs: object
+) -> T:
+    """Apply the configured breaker at an outbound provider boundary."""
+    return await provider_circuits.get(provider).call(partial(operation, *args, **kwargs))

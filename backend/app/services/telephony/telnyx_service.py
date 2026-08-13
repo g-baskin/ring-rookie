@@ -4,6 +4,7 @@ import httpx
 import structlog
 import telnyx
 
+from app.core.circuit_breaker import provider_call
 from app.services.telephony.base import (
     CallDirection,
     CallInfo,
@@ -80,7 +81,7 @@ class TelnyxService(TelephonyProvider):
             "texml_url": webhook_url,
         }
 
-        response = await client.post("/texml/calls", json=payload)
+        response = await provider_call("telnyx", client.post, "/texml/calls", json=payload)
         response.raise_for_status()
         data = response.json()
 
@@ -159,7 +160,9 @@ class TelnyxService(TelephonyProvider):
 
         try:
             client = await self._get_http_client()
-            response = await client.post(f"/calls/{call_id}/actions/hangup", json={})
+            response = await provider_call(
+                "telnyx", client.post, f"/calls/{call_id}/actions/hangup", json={}
+            )
             response.raise_for_status()
             return True
         except Exception:
@@ -184,7 +187,9 @@ class TelnyxService(TelephonyProvider):
             if webhook_url:
                 payload["webhook_url"] = webhook_url
 
-            response = await client.post(
+            response = await provider_call(
+                "telnyx",
+                client.post,
                 f"/calls/{call_control_id}/actions/answer",
                 json=payload,
             )
@@ -218,7 +223,9 @@ class TelnyxService(TelephonyProvider):
 
         try:
             client = await self._get_http_client()
-            response = await client.post(
+            response = await provider_call(
+                "telnyx",
+                client.post,
                 f"/calls/{call_control_id}/actions/streaming_start",
                 json={
                     "stream_url": stream_url,
@@ -244,7 +251,7 @@ class TelnyxService(TelephonyProvider):
         numbers = []
         client = await self._get_http_client()
 
-        response = await client.get("/phone_numbers")
+        response = await provider_call("telnyx", client.get, "/phone_numbers")
         response.raise_for_status()
         data = response.json()
 
@@ -302,7 +309,9 @@ class TelnyxService(TelephonyProvider):
         if contains:
             params["filter[phone_number][contains]"] = contains
 
-        response = await client.get("/available_phone_numbers", params=params)
+        response = await provider_call(
+            "telnyx", client.get, "/available_phone_numbers", params=params
+        )
         response.raise_for_status()
         data = response.json()
 
@@ -338,7 +347,9 @@ class TelnyxService(TelephonyProvider):
         client = await self._get_http_client()
 
         # First, create a number order
-        response = await client.post(
+        response = await provider_call(
+            "telnyx",
+            client.post,
             "/number_orders",
             json={
                 "phone_numbers": [{"phone_number": phone_number}],
@@ -377,7 +388,9 @@ class TelnyxService(TelephonyProvider):
 
         try:
             client = await self._get_http_client()
-            response = await client.delete(f"/phone_numbers/{phone_number_id}")
+            response = await provider_call(
+                "telnyx", client.delete, f"/phone_numbers/{phone_number_id}"
+            )
             response.raise_for_status()
             return True
         except Exception as e:
@@ -416,7 +429,9 @@ class TelnyxService(TelephonyProvider):
             if texml_application_id:
                 payload["texml_application_id"] = texml_application_id
 
-            response = await client.patch(
+            response = await provider_call(
+                "telnyx",
+                client.patch,
                 f"/phone_numbers/{phone_number_id}",
                 json=payload,
             )
@@ -489,7 +504,7 @@ class TelnyxService(TelephonyProvider):
 
         try:
             # List existing TeXML applications
-            response = await client.get("/texml_applications")
+            response = await provider_call("telnyx", client.get, "/texml_applications")
             response.raise_for_status()
             data = response.json()
 
@@ -502,7 +517,9 @@ class TelnyxService(TelephonyProvider):
                     if status_callback_url:
                         update_payload["status_callback_url"] = status_callback_url
 
-                    await client.patch(f"/texml_applications/{app_id}", json=update_payload)
+                    await provider_call(
+                        "telnyx", client.patch, f"/texml_applications/{app_id}", json=update_payload
+                    )
                     self.logger.info("updated_texml_app", id=app_id)
                     return str(app_id)
 
@@ -516,7 +533,9 @@ class TelnyxService(TelephonyProvider):
                 create_payload["status_callback_url"] = status_callback_url
                 create_payload["status_callback_method"] = "POST"
 
-            response = await client.post("/texml_applications", json=create_payload)
+            response = await provider_call(
+                "telnyx", client.post, "/texml_applications", json=create_payload
+            )
             response.raise_for_status()
             new_data = response.json()
             app_id = new_data.get("data", {}).get("id")
@@ -535,7 +554,7 @@ class TelnyxService(TelephonyProvider):
         """
         # List existing connections
         client = await self._get_http_client()
-        response = await client.get("/credential_connections")
+        response = await provider_call("telnyx", client.get, "/credential_connections")
         response.raise_for_status()
         data = response.json()
 
@@ -544,7 +563,9 @@ class TelnyxService(TelephonyProvider):
             return str(connections[0].get("id", ""))
 
         # Create a new connection if none exists
-        response = await client.post(
+        response = await provider_call(
+            "telnyx",
+            client.post,
             "/credential_connections",
             json={
                 "connection_name": "voice-agent-connection",
