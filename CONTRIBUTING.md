@@ -1,6 +1,25 @@
 # Contributing
 
-Use Python 3.12+, `uv`, and Node 22. Install with `make install`. Before opening a pull request run:
+Use Python 3.12+, `uv`, Node 22, Docker, and Docker Compose 2.22+. Install host dependencies with `make install`.
+
+## Persistent local development
+
+Compose owns the complete local stack. Normal checks run beside it and must not call `docker compose down`.
+
+```sh
+make dev-up       # Start and wait for PostgreSQL, Redis, backend, and frontend
+make dev-status   # Show service and health state
+make dev-logs     # Follow application and dependency logs
+make dev-smoke    # Verify dependencies, readiness, login, and API proxy
+make dev-restart  # Restart frontend and backend only
+make dev-down     # Stop containers; preserve named data volumes
+```
+
+Use `make dev-watch` in the foreground when Compose source-watch output is useful. The backend runs Uvicorn reload against `backend/app`; Next.js hot reload serves from `frontend/.next-dev`. Production builds write `frontend/.next-build`, so `npm run build` cannot replace manifests used by the running development server.
+
+PostgreSQL and Redis data survive `make dev-down`. Database volumes are removed only by the explicit destructive command `make reset-database CONFIRM_RESET=yes`. A single local container is durable development infrastructure, **not high availability**.
+
+Before opening a pull request run:
 
 ```sh
 make backend-ci
@@ -12,7 +31,7 @@ make migration-check
 make security-check dependency-check
 ```
 
-`make ci` runs every gate. `make clean` removes generated artifacts only. Database volumes are removed only by `make reset-database CONFIRM_RESET=yes`.
+`make ci` runs every gate. `make clean` removes generated artifacts only and does not stop the stack.
 
 `backend/tests/ci-known-failures.txt` temporarily deselects the 17 legacy failures exposed when CI was introduced. CI runs every other test and enforces the measured 37% coverage baseline; delete entries as defects are repaired, and never add one without a tracked issue and owner.
 

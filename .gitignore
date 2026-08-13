@@ -72,6 +72,12 @@ frontend/.env.local
 *.seed
 *.pid.lock
 
+# Frontend build artifacts
+frontend/.next/
+frontend/.next-*/
+frontend/node_modules/
+frontend/coverage/
+
 # OS
 .DS_Store
 Thumbs.db
