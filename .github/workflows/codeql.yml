@@ -1,0 +1,16 @@
+name: CodeQL
+on:
+  pull_request:
+  push:
+  schedule: [{cron: "17 4 * * 1"}]
+permissions: {contents: read, security-events: write}
+concurrency: {group: "codeql-${{ github.ref }}", cancel-in-progress: true}
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    strategy: {matrix: {language: [python, javascript-typescript]}}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: github/codeql-action/init@b611370bb5703a7efb587f9c80c56c2284e7d5a1 # v3.29.8
+        with: {languages: "${{ matrix.language }}"}
+      - uses: github/codeql-action/analyze@b611370bb5703a7efb587f9c80c56c2284e7d5a1 # v3.29.8

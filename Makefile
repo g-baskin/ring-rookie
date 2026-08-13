@@ -1,67 +1,46 @@
-.PHONY: help install dev stop clean test lint format migrate check check-backend check-frontend
-
+.PHONY: help install dev stop clean reset-database test lint format migrate check backend-ci frontend-ci migration-check security-check dependency-check env-check ci
 help:
-	@echo "Available commands:"
-	@echo "  make install        - Install all dependencies"
-	@echo "  make dev            - Start development environment"
-	@echo "  make stop           - Stop all services"
-	@echo "  make clean          - Clean up containers and volumes"
-	@echo "  make test           - Run tests"
-	@echo "  make lint           - Run linters"
-	@echo "  make format         - Format code"
-	@echo "  make migrate        - Run database migrations"
-	@echo "  make check          - Run all quality checks (lint + typecheck + format)"
-	@echo "  make check-backend  - Run backend checks only"
-	@echo "  make check-frontend - Run frontend checks only"
-
+	@echo "CI: backend-ci frontend-ci migration-check security-check dependency-check env-check ci"
+	@echo "Maintenance: clean (artifacts only), reset-database CONFIRM_RESET=yes (destructive)"
 install:
-	@echo "Installing backend dependencies..."
 	cd backend && uv sync --all-extras
-	@echo "Installing frontend dependencies..."
-	cd frontend && npm install
-	@echo "Starting Docker services..."
-	docker compose up -d postgres redis
-
+	cd frontend && npm ci
 dev:
-	@echo "Starting development environment..."
 	docker compose up -d postgres redis
-	@echo "Services started. Run the following in separate terminals:"
-	@echo "  Backend:  cd backend && uv run uvicorn app.main:app --reload"
-	@echo "  Frontend: cd frontend && npm run dev"
-
 stop:
 	docker compose down
-
 clean:
+	rm -rf backend/.mypy_cache backend/.pytest_cache backend/.ruff_cache frontend/.next frontend/coverage
+reset-database:
+	@test "$(CONFIRM_RESET)" = yes || (echo "Destructive: rerun with CONFIRM_RESET=yes"; exit 1)
 	docker compose down -v
-	rm -rf backend/.venv
-	rm -rf frontend/node_modules
-	rm -rf frontend/.next
-
 test:
 	cd backend && uv run pytest
 	cd frontend && npm test
-
 lint:
-	cd backend && uv run ruff check .
-	cd backend && uv run mypy app
+	cd backend && uv run ruff check app tests && uv run mypy app
 	cd frontend && npm run lint
-
 format:
-	cd backend && uv run ruff format .
-	cd frontend && npm run lint --fix
-
+	cd backend && uv run ruff format app tests
+	cd frontend && npm run format
 migrate:
 	cd backend && uv run alembic upgrade head
-
-check:
-	@echo "Running all quality checks..."
-	bash scripts/check-all.sh
-
-check-backend:
-	@echo "Running backend checks..."
-	cd backend && bash scripts/check.sh
-
-check-frontend:
-	@echo "Running frontend checks..."
-	cd frontend && npm run check
+backend-ci:
+	cd backend && uv sync --frozen --all-extras
+	cd backend && uv run ruff check app tests && uv run ruff format --check app tests && uv run mypy app
+	cd backend && uv run pytest --cov-fail-under=60
+frontend-ci:
+	cd frontend && npm ci && npm run lint && npm run type-check && npm run format:check && npm test && npm run build
+migration-check:
+	@test "$$(cd backend && uv run alembic heads | grep -c '(head)')" = 1
+	cd backend && uv run alembic upgrade head && uv run alembic check
+	cd backend && uv run alembic downgrade -1 && uv run alembic upgrade head
+security-check:
+	gitleaks detect --redact --no-banner
+dependency-check:
+	cd backend && uv export --frozen --no-dev | uvx pip-audit -r /dev/stdin
+	cd frontend && npm audit --audit-level=high
+env-check:
+	python3 scripts/check_env_drift.py
+check: backend-ci frontend-ci env-check
+ci: backend-ci frontend-ci migration-check security-check dependency-check env-check

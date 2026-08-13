@@ -1,0 +1,19 @@
+name: Migrations
+on: [pull_request, push]
+permissions: {contents: read}
+concurrency: {group: "migrations-${{ github.ref }}", cancel-in-progress: true}
+jobs:
+  migration-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: ringrookie}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env: {DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/ringrookie"}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
+      - run: cd backend && uv sync --frozen --all-extras
+      - run: make migration-check
