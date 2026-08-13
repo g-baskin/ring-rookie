@@ -46,6 +46,7 @@ services:
       - sh
       - -c
       - >-
+        uv run python scripts/ensure_database.py &&
         uv run python scripts/bootstrap_database.py &&
         if uv run python scripts/database_needs_stamp.py; then
           uv run alembic stamp head;
@@ -119,7 +120,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     working_dir: /app
-    command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
+    command: ["sh", "-c", "test -x node_modules/.bin/next || npm ci; exec npm run dev -- --hostname 0.0.0.0"]
     env_file:
       - ./frontend/.env
     environment:

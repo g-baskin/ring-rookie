@@ -1,7 +1,6 @@
 """Health check endpoints."""
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import text
@@ -37,8 +36,9 @@ async def _database_is_ready(db: AsyncSession) -> bool:
     return True
 
 
-async def _redis_is_ready(redis: Any) -> bool:
+async def _redis_is_ready() -> bool:
     try:
+        redis = await get_redis()
         await redis.ping()
     except Exception:
         logger.exception("Redis health check failed")
@@ -50,11 +50,10 @@ async def _redis_is_ready(redis: Any) -> bool:
 async def readiness_check(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    redis: Any = Depends(get_redis),
 ) -> dict[str, str]:
     """Report readiness only when PostgreSQL and Redis respond."""
     database_ready = await _database_is_ready(db)
-    redis_ready = await _redis_is_ready(redis)
+    redis_ready = await _redis_is_ready()
 
     if not database_ready or not redis_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -78,9 +77,9 @@ async def health_check_db(response: Response, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/health/redis")
-async def health_check_redis(response: Response, redis: Any = Depends(get_redis)) -> dict[str, str]:
+async def health_check_redis(response: Response) -> dict[str, str]:
     """Redis health check endpoint."""
-    if await _redis_is_ready(redis):
+    if await _redis_is_ready():
         return {"status": "healthy", "redis": "connected"}
 
     response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

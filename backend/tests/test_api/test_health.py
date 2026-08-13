@@ -35,7 +35,10 @@ class TestLivenessAndReadiness:
 
     @pytest.mark.asyncio
     async def test_readiness_succeeds(self, test_client: AsyncClient) -> None:
-        response = await test_client.get("/health/ready")
+        healthy_redis = AsyncMock()
+        healthy_redis.ping.return_value = True
+        with patch("app.api.health.get_redis", new=AsyncMock(return_value=healthy_redis)):
+            response = await test_client.get("/health/ready")
 
         assert response.status_code == 200
         assert response.json() == {
@@ -47,22 +50,18 @@ class TestLivenessAndReadiness:
     @pytest.mark.asyncio
     async def test_readiness_redacts_dependency_errors(self, test_client: AsyncClient) -> None:
         error_detail = "postgresql://admin:secret@private-db:5432/ringrookie"
-        unavailable_redis = AsyncMock()
-        unavailable_redis.ping.side_effect = RuntimeError(error_detail)
-
-        from app.db.redis import get_redis
-        from app.main import app
-
-        app.dependency_overrides[get_redis] = lambda: unavailable_redis
-        try:
-            with patch(
+        with (
+            patch(
                 "app.api.health._database_is_ready",
                 new=AsyncMock(return_value=False),
-            ):
-                response = await test_client.get("/health/ready")
-                liveness_response = await test_client.get("/health/live")
-        finally:
-            app.dependency_overrides.pop(get_redis, None)
+            ),
+            patch(
+                "app.api.health.get_redis",
+                new=AsyncMock(side_effect=RuntimeError(error_detail)),
+            ),
+        ):
+            response = await test_client.get("/health/ready")
+            liveness_response = await test_client.get("/health/live")
 
         assert response.status_code == 503
         assert response.json() == {
@@ -125,7 +124,10 @@ class TestRedisHealthCheck:
     @pytest.mark.asyncio
     async def test_redis_health_check_success(self, test_client: AsyncClient) -> None:
         """Test Redis health check returns healthy status."""
-        response = await test_client.get("/health/redis")
+        healthy_redis = AsyncMock()
+        healthy_redis.ping.return_value = True
+        with patch("app.api.health.get_redis", new=AsyncMock(return_value=healthy_redis)):
+            response = await test_client.get("/health/redis")
 
         assert response.status_code == 200
         data = response.json()
@@ -135,17 +137,11 @@ class TestRedisHealthCheck:
     @pytest.mark.asyncio
     async def test_redis_health_check_failure(self, test_client: AsyncClient) -> None:
         """Test Redis health check handles connection failures."""
-        mock_redis = AsyncMock()
-        mock_redis.ping.side_effect = Exception("Redis connection failed")
-
-        from app.db.redis import get_redis
-        from app.main import app
-
-        app.dependency_overrides[get_redis] = lambda: mock_redis
-        try:
+        with patch(
+            "app.api.health.get_redis",
+            new=AsyncMock(side_effect=Exception("Redis connection failed")),
+        ):
             response = await test_client.get("/health/redis")
-        finally:
-            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 503
         data = response.json()
