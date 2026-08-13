@@ -8,7 +8,19 @@ import { api } from "@/lib/api";
 vi.mock("@/lib/api", () => ({
   api: {
     get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/api/agents", () => ({
+  fetchAgents: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/lib/api/telephony", () => ({
+  listPhoneNumbers: vi.fn().mockResolvedValue([]),
+  makeOutboundCall: vi.fn(),
 }));
 
 const mockContacts = [
@@ -62,6 +74,7 @@ describe("CRMPage", () => {
       },
     });
     vi.clearAllMocks();
+    vi.mocked(api.get).mockResolvedValue({ data: [] });
   });
 
   const renderWithClient = (ui: React.ReactElement) => {
@@ -73,9 +86,7 @@ describe("CRMPage", () => {
     renderWithClient(<CRMPage />);
 
     expect(screen.getByText("CRM")).toBeInTheDocument();
-    expect(
-      screen.getByText("Manage your contacts, appointments, and call interactions")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Manage your contacts and interactions")).toBeInTheDocument();
   });
 
   it("renders Add Contact button", () => {
@@ -187,7 +198,9 @@ describe("CRMPage", () => {
     renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Showing 3 contacts")).toBeInTheDocument();
+      expect(screen.getByText("John Doe")).toBeInTheDocument();
+      expect(screen.getByText("Jane Smith")).toBeInTheDocument();
+      expect(screen.getByText("Bob")).toBeInTheDocument();
     });
   });
 
@@ -196,7 +209,8 @@ describe("CRMPage", () => {
     renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Showing 1 contact")).toBeInTheDocument();
+      expect(screen.getByText("John Doe")).toBeInTheDocument();
+      expect(screen.queryByText("Jane Smith")).not.toBeInTheDocument();
     });
   });
 
@@ -220,13 +234,13 @@ describe("CRMPage", () => {
     });
   });
 
-  it("renders View Details buttons for each contact", async () => {
+  it("renders each contact as an interactive card", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: mockContacts });
-    renderWithClient(<CRMPage />);
+    const { container } = renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      const viewDetailsButtons = screen.getAllByRole("button", { name: /View Details/i });
-      expect(viewDetailsButtons).toHaveLength(3);
+      const contactCards = container.querySelectorAll('[class*="cursor-pointer"]');
+      expect(contactCards).toHaveLength(3);
     });
   });
 
@@ -286,7 +300,7 @@ describe("CRMPage", () => {
     });
 
     // Verify query cache
-    const cachedData = queryClient.getQueryData(["contacts"]);
+    const cachedData = queryClient.getQueryData(["contacts", "all"]);
     expect(cachedData).toEqual(mockContacts);
   });
 
@@ -295,7 +309,7 @@ describe("CRMPage", () => {
     renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Scheduled this month")).toBeInTheDocument();
+      expect(screen.getByText("Appointments")).toBeInTheDocument();
     });
   });
 
@@ -304,7 +318,7 @@ describe("CRMPage", () => {
     renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Total interactions logged")).toBeInTheDocument();
+      expect(screen.getByText("Call Interactions")).toBeInTheDocument();
     });
   });
 
@@ -313,7 +327,7 @@ describe("CRMPage", () => {
     const { container } = renderWithClient(<CRMPage />);
 
     await waitFor(() => {
-      const contactCards = container.querySelectorAll('[class*="hover:bg-accent"]');
+      const contactCards = container.querySelectorAll('[class*="hover:border-primary"]');
       expect(contactCards.length).toBeGreaterThan(0);
     });
   });

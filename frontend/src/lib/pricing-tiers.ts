@@ -187,14 +187,18 @@ export function compareTiers(
   if (!premiumTier) throw new Error("Premium tier not found");
   const premiumCost = calculateMonthlyCost(premiumTier, callsPerMonth, avgDurationMinutes);
 
-  return PRICING_TIERS.map((tier) => {
-    const cost = calculateMonthlyCost(tier, callsPerMonth, avgDurationMinutes);
-    const savingsVsPremium = premiumCost.totalCost - cost.totalCost;
+  const tierOrder = ["budget", "balanced", "premium-mini", "premium"];
 
-    return {
-      tier,
-      cost,
-      savingsVsPremium,
-    };
-  });
+  return [...PRICING_TIERS]
+    .sort((left, right) => tierOrder.indexOf(left.id) - tierOrder.indexOf(right.id))
+    .map((tier) => {
+      const cost = calculateMonthlyCost(tier, callsPerMonth, avgDurationMinutes);
+      const savingsVsPremium = premiumCost.totalCost - cost.totalCost;
+
+      return {
+        tier,
+        cost,
+        savingsVsPremium,
+      };
+    });
 }

@@ -3,6 +3,17 @@ import { render, screen, waitFor } from "@/test/test-utils";
 import userEvent from "@testing-library/user-event";
 import IntegrationsPage from "../page";
 
+vi.mock("@/lib/api", () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: [] }),
+  },
+  integrationsApi: {
+    list: vi.fn().mockResolvedValue({ integrations: [] }),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  },
+}));
+
 describe("IntegrationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -20,8 +31,8 @@ describe("IntegrationsPage", () => {
   it("displays connection statistics", () => {
     render(<IntegrationsPage />);
 
-    // Internal tools (crm, bookings) are always connected
-    expect(screen.getByText("2 Connected")).toBeInTheDocument();
+    // Internal tools (call control, CRM, and bookings) are always connected.
+    expect(screen.getByText("3 Connected")).toBeInTheDocument();
     expect(screen.getByText(/\d+ Available/)).toBeInTheDocument();
   });
 
