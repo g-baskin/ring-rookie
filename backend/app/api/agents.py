@@ -28,6 +28,7 @@ class CreateAgentRequest(BaseModel):
     description: str | None = None
     pricing_tier: str = Field(..., pattern="^(budget|balanced|premium-mini|premium)$")
     system_prompt: str = Field(..., min_length=10)
+    system_prompt_character_target: int = Field(default=5000, ge=1000, le=20000)
     language: str = Field(default="en-US")
     voice: str = Field(default="shimmer")
     enabled_tools: list[str] = Field(default_factory=list)
@@ -60,6 +61,7 @@ class UpdateAgentRequest(BaseModel):
     description: str | None = None
     pricing_tier: str | None = Field(None, pattern="^(budget|balanced|premium-mini|premium)$")
     system_prompt: str | None = Field(None, min_length=10)
+    system_prompt_character_target: int | None = Field(None, ge=1000, le=20000)
     language: str | None = None
     voice: str | None = None
     enabled_tools: list[str] | None = None
@@ -94,6 +96,7 @@ class AgentResponse(BaseModel):
     description: str | None
     pricing_tier: str
     system_prompt: str
+    system_prompt_character_target: int
     language: str
     voice: str
     enabled_tools: list[str]
@@ -146,6 +149,7 @@ async def create_agent(
         description=agent_request.description,
         pricing_tier=agent_request.pricing_tier,
         system_prompt=agent_request.system_prompt,
+        system_prompt_character_target=agent_request.system_prompt_character_target,
         language=agent_request.language,
         voice=agent_request.voice,
         enabled_tools=agent_request.enabled_tools,
@@ -345,6 +349,7 @@ def _apply_agent_updates(agent: Agent, request: UpdateAgentRequest) -> None:
         "name",
         "description",
         "system_prompt",
+        "system_prompt_character_target",
         "language",
         "voice",
         "enabled_tools",
@@ -440,6 +445,7 @@ def _agent_to_response(agent: Agent) -> AgentResponse:
         description=agent.description,
         pricing_tier=agent.pricing_tier,
         system_prompt=agent.system_prompt,
+        system_prompt_character_target=agent.system_prompt_character_target,
         language=agent.language,
         voice=agent.voice,
         enabled_tools=agent.enabled_tools,

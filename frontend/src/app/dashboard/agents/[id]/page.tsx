@@ -71,6 +71,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PROMPT_CHARACTER_TARGET,
+  isPromptOverTarget,
+  PromptCharacterTargetField,
+} from "./prompt-character-target";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 // Best practices system prompt template based on OpenAI's 2025 GPT Realtime guidelines
@@ -170,6 +175,7 @@ const agentFormSchema = z.object({
   llmModel: z.string().default("gpt-4o"),
   voice: z.string().default("marin"),
   systemPrompt: z.string().min(10, "System prompt is required"),
+  systemPromptCharacterTarget: z.number().int().min(1000).max(20000).default(5000),
   initialGreeting: z.string().optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().min(100).max(16000).default(2000),
@@ -211,7 +217,15 @@ const TAB_FIELDS: Record<string, (keyof AgentFormValues)[]> = {
     "sttProvider",
     "deepgramModel",
   ],
-  llm: ["llmProvider", "llmModel", "voice", "systemPrompt", "temperature", "maxTokens"],
+  llm: [
+    "llmProvider",
+    "llmModel",
+    "voice",
+    "systemPrompt",
+    "systemPromptCharacterTarget",
+    "temperature",
+    "maxTokens",
+  ],
   tools: ["enabledTools", "enabledToolIds"],
   advanced: [
     "telephonyProvider",
@@ -330,6 +344,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       llmProvider: "openai-realtime",
       llmModel: "gpt-realtime-2025-08-28",
       systemPrompt: "",
+      systemPromptCharacterTarget: 5000,
       initialGreeting: "",
       temperature: 0.7,
       maxTokens: 2000,
@@ -368,6 +383,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
         llmModel: agent.pricing_tier === "premium" ? "gpt-realtime-2025-08-28" : "gpt-4o",
         voice: agent.voice ?? "marin",
         systemPrompt: agent.system_prompt,
+        systemPromptCharacterTarget: agent.system_prompt_character_target ?? 5000,
         initialGreeting: agent.initial_greeting ?? "",
         temperature: agent.temperature,
         maxTokens: agent.max_tokens,
@@ -573,6 +589,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       description: data.description,
       pricing_tier: pricingTier,
       system_prompt: data.systemPrompt,
+      system_prompt_character_target: data.systemPromptCharacterTarget,
       initial_greeting: data.initialGreeting?.trim() ? data.initialGreeting.trim() : null,
       language: data.language,
       voice: data.voice,
@@ -1220,24 +1237,19 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                     name="systemPrompt"
                     render={({ field }) => {
                       const charCount = field.value?.length ?? 0;
-                      const isOptimal = charCount >= 100 && charCount <= 2000;
+                      const target =
+                        form.watch("systemPromptCharacterTarget") ??
+                        DEFAULT_PROMPT_CHARACTER_TARGET;
                       const isTooShort = charCount > 0 && charCount < 100;
-                      const isTooLong = charCount > 2000;
+                      const isTooLong = isPromptOverTarget(charCount, target);
                       return (
                         <FormItem>
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                             <FormLabel>System Prompt</FormLabel>
-                            <span
-                              className={cn(
-                                "text-xs",
-                                isOptimal && "text-green-600",
-                                isTooShort && "text-yellow-600",
-                                isTooLong && "text-destructive"
-                              )}
-                            >
+                            <span className={cn("text-xs", isTooLong && "text-destructive")}>
                               {charCount.toLocaleString()} characters
                               {isTooShort && " (recommended: 100+)"}
-                              {isTooLong && " (recommended: under 2,000)"}
+                              {isTooLong && ` (recommended target: ${target.toLocaleString()})`}
                             </span>
                           </div>
                           <FormControl>
@@ -1248,13 +1260,18 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                             />
                           </FormControl>
                           <FormDescription>
-                            Instructions that define your agent&apos;s personality and behavior. Aim
-                            for 100-2,000 characters for best results.
+                            Instructions that define your agent&apos;s personality and behavior.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       );
                     }}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="systemPromptCharacterTarget"
+                    render={({ field }) => <PromptCharacterTargetField field={field} />}
                   />
 
                   <FormField

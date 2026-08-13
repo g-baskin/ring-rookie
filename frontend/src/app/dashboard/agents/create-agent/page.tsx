@@ -172,6 +172,7 @@ const agentFormSchema = z.object({
   language: z.string().default("en-US"),
   voice: z.string().default("marin"), // marin is the most natural & professional voice
   systemPrompt: z.string().min(10, "System prompt is required"),
+  systemPromptCharacterTarget: z.number().int().min(1000).max(20000).default(5000),
   initialGreeting: z.string().optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().min(100).max(16000).default(2000),
@@ -198,6 +199,7 @@ export default function CreateAgentPage() {
       name: "",
       description: "",
       systemPrompt: "",
+      systemPromptCharacterTarget: 5000,
       initialGreeting: "",
       pricingTier: "premium",
       language: "en-US",
@@ -268,6 +270,7 @@ export default function CreateAgentPage() {
       description: data.description,
       pricing_tier: data.pricingTier,
       system_prompt: data.systemPrompt,
+      system_prompt_character_target: data.systemPromptCharacterTarget,
       initial_greeting: data.initialGreeting?.trim() ? data.initialGreeting.trim() : undefined,
       language: data.language,
       voice:
@@ -786,8 +789,10 @@ export default function CreateAgentPage() {
                   name="systemPrompt"
                   render={({ field }) => {
                     const charCount = field.value?.length ?? 0;
-                    const isOptimal = charCount >= 100 && charCount <= 2000;
+                    const target = form.watch("systemPromptCharacterTarget") ?? 5000;
+                    const isOptimal = charCount >= 100 && charCount <= target;
                     const isTooShort = charCount > 0 && charCount < 100;
+                    const isTooLong = charCount > target;
 
                     return (
                       <FormItem>
@@ -797,11 +802,13 @@ export default function CreateAgentPage() {
                             className={cn(
                               "text-xs",
                               isOptimal && "text-green-600",
-                              isTooShort && "text-yellow-600"
+                              isTooShort && "text-yellow-600",
+                              isTooLong && "text-destructive"
                             )}
                           >
                             {charCount} characters
                             {isTooShort && " (aim for 100+)"}
+                            {isTooLong && ` (recommended target: ${target.toLocaleString()})`}
                           </span>
                         </div>
                         <FormControl>
@@ -829,6 +836,52 @@ Guidelines:
                       </FormItem>
                     );
                   }}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="systemPromptCharacterTarget"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel htmlFor="create-system-prompt-character-target">
+                        Recommended prompt-length target
+                      </FormLabel>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <FormControl>
+                          <Input
+                            id="create-system-prompt-character-target"
+                            type="number"
+                            min={1000}
+                            max={20000}
+                            step={1}
+                            value={field.value}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                            onBlur={(event) => {
+                              const value = Number(event.target.value);
+                              field.onChange(
+                                Math.min(20000, Math.max(1000, Math.round(value || 5000)))
+                              );
+                              field.onBlur();
+                            }}
+                            className="w-full sm:w-32"
+                          />
+                        </FormControl>
+                        <Slider
+                          aria-label="Recommended prompt-length target"
+                          min={1000}
+                          max={20000}
+                          step={100}
+                          value={[field.value ?? 5000]}
+                          onValueChange={(value) => field.onChange(value[0])}
+                          className="flex-1"
+                        />
+                      </div>
+                      <FormDescription>
+                        A recommended system-prompt length, not the model output max tokens.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
 
                 <FormField
