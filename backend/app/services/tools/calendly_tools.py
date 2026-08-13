@@ -7,6 +7,8 @@ from typing import Any
 import httpx
 import structlog
 
+from app.core.circuit_breaker import provider_call
+
 logger = structlog.get_logger()
 
 ToolHandler = Callable[..., Awaitable[dict[str, Any]]]
@@ -203,7 +205,7 @@ class CalendlyTools:
         if self._user_uri and self._organization_uri:
             return
 
-        response = await self.client.get("/users/me")
+        response = await provider_call("calendly", self.client.get, "/users/me")
         if response.status_code == HTTPStatus.OK:
             data = response.json()
             self._user_uri = data["resource"]["uri"]
@@ -218,7 +220,9 @@ class CalendlyTools:
             if active:
                 params["active"] = "true"
 
-            response = await self.client.get("/event_types", params=params)
+            response = await provider_call(
+                "calendly", self.client.get, "/event_types", params=params
+            )
 
             if response.status_code != HTTPStatus.OK:
                 return {
@@ -252,7 +256,9 @@ class CalendlyTools:
     ) -> dict[str, Any]:
         """Get available time slots for an event type."""
         try:
-            response = await self.client.get(
+            response = await provider_call(
+                "calendly",
+                self.client.get,
                 "/event_type_available_times",
                 params={
                     "event_type": event_type_uri,
@@ -304,7 +310,9 @@ class CalendlyTools:
                 "owner_type": "User",
             }
 
-            response = await self.client.post("/scheduling_links", json=payload)
+            response = await provider_call(
+                "calendly", self.client.post, "/scheduling_links", json=payload
+            )
 
             if response.status_code != HTTPStatus.CREATED:
                 return {
@@ -358,7 +366,9 @@ class CalendlyTools:
             if invitee_email:
                 params["invitee_email"] = invitee_email
 
-            response = await self.client.get("/scheduled_events", params=params)
+            response = await provider_call(
+                "calendly", self.client.get, "/scheduled_events", params=params
+            )
 
             if response.status_code != HTTPStatus.OK:
                 return {
@@ -392,7 +402,9 @@ class CalendlyTools:
     async def get_event(self, event_uuid: str) -> dict[str, Any]:
         """Get details of a specific event."""
         try:
-            response = await self.client.get(f"/scheduled_events/{event_uuid}")
+            response = await provider_call(
+                "calendly", self.client.get, f"/scheduled_events/{event_uuid}"
+            )
 
             if response.status_code != HTTPStatus.OK:
                 return {
@@ -403,7 +415,9 @@ class CalendlyTools:
             event = response.json()["resource"]
 
             # Get invitees
-            invitees_response = await self.client.get(f"/scheduled_events/{event_uuid}/invitees")
+            invitees_response = await provider_call(
+                "calendly", self.client.get, f"/scheduled_events/{event_uuid}/invitees"
+            )
             invitees = []
             if invitees_response.status_code == HTTPStatus.OK:
                 for inv in invitees_response.json().get("collection", []):
@@ -442,8 +456,11 @@ class CalendlyTools:
             if reason:
                 payload["reason"] = reason
 
-            response = await self.client.post(
-                f"/scheduled_events/{event_uuid}/cancellation", json=payload
+            response = await provider_call(
+                "calendly",
+                self.client.post,
+                f"/scheduled_events/{event_uuid}/cancellation",
+                json=payload,
             )
 
             if response.status_code not in (HTTPStatus.OK, HTTPStatus.CREATED):

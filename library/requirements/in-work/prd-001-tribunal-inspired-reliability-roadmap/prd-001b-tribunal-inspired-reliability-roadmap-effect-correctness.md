@@ -1,6 +1,7 @@
 # PRD-001b: Effect Correctness
 
-> **Status:** In Work
+> **Status:** Completed
+> **Delivered:** [PR #3](https://github.com/Gahroot/ring-rookie/pull/3), merge `5e7c692584e8127a1c6923200b5d0ba57f49e676`
 > **Priority:** P0
 > **Effort:** L (1-3d)
 > **Schema changes:** Additive

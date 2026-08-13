@@ -1,6 +1,6 @@
 # PRD-001c: Provider and Worker Resilience
 
-> **Status:** Backlog
+> **Status:** In Work
 > **Priority:** P0
 > **Effort:** XL (> 3d)
 > **Schema changes:** Additive

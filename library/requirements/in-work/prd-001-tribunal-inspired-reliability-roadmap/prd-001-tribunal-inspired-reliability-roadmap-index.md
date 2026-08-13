@@ -40,8 +40,8 @@ The Tribunal repository is reference material only. Its `LicenseRef-Proprietary`
 | Phase | Sub-PRD | Scope | Priority | Status |
 |---|---|---|---|---|
 | 1 | [`prd-001a-tribunal-inspired-reliability-roadmap-delivery-spine`](./prd-001a-tribunal-inspired-reliability-roadmap-delivery-spine.md) | CI, security automation, migration verification, governance, environment drift | P0 | Completed ([#2](https://github.com/Gahroot/ring-rookie/pull/2), `2ce28c6`) |
-| 2 | [`prd-001b-tribunal-inspired-reliability-roadmap-effect-correctness`](./prd-001b-tribunal-inspired-reliability-roadmap-effect-correctness.md) | Webhook pipeline, idempotency, provider contract tests | P0 | In Work |
-| 3 | [`prd-001c-tribunal-inspired-reliability-roadmap-provider-worker-resilience`](./prd-001c-tribunal-inspired-reliability-roadmap-provider-worker-resilience.md) | Circuit breakers, retry framework, DLQ | P0 | Draft |
+| 2 | [`prd-001b-tribunal-inspired-reliability-roadmap-effect-correctness`](./prd-001b-tribunal-inspired-reliability-roadmap-effect-correctness.md) | Webhook pipeline, idempotency, provider contract tests | P0 | Completed ([#3](https://github.com/Gahroot/ring-rookie/pull/3), `5e7c692584e8127a1c6923200b5d0ba57f49e676`) |
+| 3 | [`prd-001c-tribunal-inspired-reliability-roadmap-provider-worker-resilience`](./prd-001c-tribunal-inspired-reliability-roadmap-provider-worker-resilience.md) | Circuit breakers, retry framework, DLQ | P0 | In Work |
 | 4 | [`prd-001d-tribunal-inspired-reliability-roadmap-observability-supervision`](./prd-001d-tribunal-inspired-reliability-roadmap-observability-supervision.md) | OpenTelemetry, metrics, voice-session supervision | P1 | Draft |
 | 5 | [`prd-001e-tribunal-inspired-reliability-roadmap-contracts-quality-prompts`](./prd-001e-tribunal-inspired-reliability-roadmap-contracts-quality-prompts.md) | OpenAPI generation, Playwright, prompt versioning | P1 | Draft |
 
