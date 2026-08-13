@@ -25,12 +25,12 @@ def main() -> None:
     run("docker", "compose", "up", "-d", "--wait")
     run(
         "docker", "compose", "exec", "-T", "postgres", "psql", "-U", "postgres",
-        "-d", "voice_agent", "-v", "ON_ERROR_STOP=1", "-c",
+        "-d", "ringrookie", "-v", "ON_ERROR_STOP=1", "-c",
         "CREATE TABLE IF NOT EXISTS _ha_persistence_smoke (value text primary key)",
     )
     run(
         "docker", "compose", "exec", "-T", "postgres", "psql", "-U", "postgres",
-        "-d", "voice_agent", "-v", "ON_ERROR_STOP=1", "-c",
+        "-d", "ringrookie", "-v", "ON_ERROR_STOP=1", "-c",
         f"INSERT INTO _ha_persistence_smoke(value) VALUES ('{MARKER}')",
     )
     run("docker", "compose", "exec", "-T", "redis", "redis-cli", "SET", "ha-persistence-smoke", MARKER)
@@ -39,7 +39,7 @@ def main() -> None:
 
     postgres_value = run(
         "docker", "compose", "exec", "-T", "postgres", "psql", "-U", "postgres",
-        "-d", "voice_agent", "-Atc",
+        "-d", "ringrookie", "-Atc",
         f"SELECT value FROM _ha_persistence_smoke WHERE value='{MARKER}'", capture=True,
     )
     redis_value = run(
@@ -51,7 +51,7 @@ def main() -> None:
 
     run(
         "docker", "compose", "exec", "-T", "postgres", "psql", "-U", "postgres",
-        "-d", "voice_agent", "-v", "ON_ERROR_STOP=1", "-c",
+        "-d", "ringrookie", "-v", "ON_ERROR_STOP=1", "-c",
         f"DELETE FROM _ha_persistence_smoke WHERE value='{MARKER}'",
     )
     run("docker", "compose", "exec", "-T", "redis", "redis-cli", "DEL", "ha-persistence-smoke")
