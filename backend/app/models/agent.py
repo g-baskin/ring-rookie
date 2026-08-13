@@ -49,6 +49,13 @@ class Agent(Base):
     system_prompt: Mapped[str] = mapped_column(
         Text, nullable=False, comment="System prompt/instructions for agent"
     )
+    system_prompt_character_target: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=5000,
+        server_default="5000",
+        comment="Recommended system prompt character target",
+    )
     language: Mapped[str] = mapped_column(
         String(10), nullable=False, default="en-US", comment="Agent language (e.g., en-US, es-ES)"
     )
