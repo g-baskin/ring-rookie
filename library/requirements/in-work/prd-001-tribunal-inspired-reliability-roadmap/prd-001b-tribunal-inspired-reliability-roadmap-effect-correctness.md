@@ -1,6 +1,6 @@
 # PRD-001b: Effect Correctness
 
-> **Status:** Backlog
+> **Status:** In Work
 > **Priority:** P0
 > **Effort:** L (1-3d)
 > **Schema changes:** Additive

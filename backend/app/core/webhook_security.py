@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import time
 from functools import wraps
 from typing import Any
 
@@ -11,6 +12,7 @@ from fastapi import HTTPException, Request
 from app.core.config import settings
 
 logger = structlog.get_logger()
+TELNYX_MAX_TIMESTAMP_AGE_SECONDS = 300
 
 
 def validate_twilio_signature(
@@ -75,6 +77,12 @@ def validate_telnyx_signature(
         True if signature is valid, False otherwise
     """
     if not signature or not timestamp:
+        return False
+    try:
+        # Telnyx signs a Unix timestamp. Limit replay even when the signature is valid.
+        if abs(time.time() - int(timestamp)) > TELNYX_MAX_TIMESTAMP_AGE_SECONDS:
+            return False
+    except ValueError:
         return False
 
     # Use provided key or fall back to settings

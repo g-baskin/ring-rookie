@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -30,6 +30,13 @@ from app.models.agent import Agent
 from app.models.call_record import CallDirection, CallRecord, CallStatus
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.workspace import AgentWorkspace
+from app.services.effect_claims import (
+    ClaimDisposition,
+    acquire_claim,
+    complete_claim,
+    effect_digest,
+    fail_claim,
+)
 from app.services.telephony.telnyx_service import TelnyxService
 from app.services.telephony.twilio_service import TwilioService
 
@@ -41,6 +48,7 @@ router = APIRouter(prefix="/api/v1/telephony", tags=["telephony"])
 webhook_router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 logger = structlog.get_logger()
+MAX_IDEMPOTENCY_KEY_LENGTH = 128
 
 
 # =============================================================================
@@ -554,12 +562,13 @@ async def release_phone_number(
 
 @router.post("/calls", response_model=CallResponse)
 @limiter.limit("30/minute")  # Rate limit outbound call initiation (costs money!)
-async def initiate_call(
+async def initiate_call(  # noqa: PLR0912, PLR0915
     call_request: InitiateCallRequest,
     request: Request,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(..., description="Workspace ID for API key isolation"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> CallResponse:
     """Initiate an outbound call.
 
@@ -573,6 +582,12 @@ async def initiate_call(
     Returns:
         Call details
     """
+    if idempotency_key is not None and (
+        not 1 <= len(idempotency_key) <= MAX_IDEMPOTENCY_KEY_LENGTH
+        or not all(char.isalnum() or char in "._~-" for char in idempotency_key)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid Idempotency-Key")
+
     log = logger.bind(
         user_id=current_user.id, agent_id=call_request.agent_id, workspace_id=workspace_id
     )
@@ -583,6 +598,21 @@ async def initiate_call(
         workspace_uuid = uuid.UUID(workspace_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid workspace_id format") from e
+
+    outbound_claim = None
+    if idempotency_key:
+        operation = f"{current_user.id}:{call_request.agent_id}:{idempotency_key}"
+        claim_result = await acquire_claim(
+            db,
+            scope_key=str(workspace_uuid),
+            namespace="telephony.outbound-call",
+            digest=effect_digest(operation),
+        )
+        outbound_claim = claim_result.claim
+        if claim_result.disposition == ClaimDisposition.COMPLETED and outbound_claim.response:
+            return CallResponse.model_validate_json(outbound_claim.response)
+        if claim_result.disposition == ClaimDisposition.PROCESSING:
+            raise HTTPException(status_code=503, detail="Call request is already processing")
 
     # Load agent to get provider preference (verify user owns agent)
     user_uuid = user_id_to_uuid(current_user.id)
@@ -595,6 +625,8 @@ async def initiate_call(
     agent = result.scalar_one_or_none()
 
     if not agent:
+        if outbound_claim:
+            await fail_claim(db, outbound_claim)
         raise HTTPException(status_code=404, detail="Agent not found")
 
     # Determine provider from agent's phone number configuration
@@ -606,6 +638,8 @@ async def initiate_call(
     twilio_service = await get_twilio_service(current_user.id, db, workspace_id=workspace_uuid)
 
     if not telnyx_service and not twilio_service:
+        if outbound_claim:
+            await fail_claim(db, outbound_claim)
         raise HTTPException(
             status_code=400,
             detail="No telephony provider configured. Please add Twilio or Telnyx credentials in Settings.",
@@ -615,24 +649,29 @@ async def initiate_call(
     base_url = str(request.base_url).rstrip("/")
     webhook_url = f"{base_url}/webhooks/{'telnyx' if telnyx_service else 'twilio'}/answer?agent_id={call_request.agent_id}"
 
-    if telnyx_service:
-        provider = "telnyx"
-        call_info = await telnyx_service.initiate_call(
-            to_number=call_request.to_number,
-            from_number=call_request.from_number,
-            webhook_url=webhook_url,
-            agent_id=call_request.agent_id,
-        )
-    elif twilio_service:
-        provider = "twilio"
-        call_info = await twilio_service.initiate_call(
-            to_number=call_request.to_number,
-            from_number=call_request.from_number,
-            webhook_url=webhook_url,
-            agent_id=call_request.agent_id,
-        )
-    else:
-        raise HTTPException(status_code=500, detail="Failed to initialize telephony service")
+    try:
+        if telnyx_service:
+            provider = "telnyx"
+            call_info = await telnyx_service.initiate_call(
+                to_number=call_request.to_number,
+                from_number=call_request.from_number,
+                webhook_url=webhook_url,
+                agent_id=call_request.agent_id,
+            )
+        elif twilio_service:
+            provider = "twilio"
+            call_info = await twilio_service.initiate_call(
+                to_number=call_request.to_number,
+                from_number=call_request.from_number,
+                webhook_url=webhook_url,
+                agent_id=call_request.agent_id,
+            )
+        else:  # pragma: no cover - providers were validated above
+            raise RuntimeError("telephony service unavailable")  # noqa: TRY301
+    except Exception:
+        if outbound_claim:
+            await fail_claim(db, outbound_claim)
+        raise
 
     log.info("call_initiated", call_id=call_info.call_id, provider=provider)
 
@@ -649,10 +688,16 @@ async def initiate_call(
         to_number=call_request.to_number,
     )
     db.add(call_record)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        if outbound_claim:
+            await db.rollback()
+            await fail_claim(db, outbound_claim)
+        raise
     log.info("call_record_created", record_id=str(call_record.id))
 
-    return CallResponse(
+    call_response = CallResponse(
         call_id=call_info.call_id,
         call_control_id=call_info.call_control_id,
         from_number=call_info.from_number,
@@ -661,6 +706,14 @@ async def initiate_call(
         status=call_info.status.value,
         agent_id=call_info.agent_id,
     )
+    if outbound_claim:
+        await complete_claim(
+            db,
+            outbound_claim,
+            response=call_response.model_dump_json(),
+            provider_ref=call_info.call_id,
+        )
+    return call_response
 
 
 @router.post("/calls/{call_id}/hangup")
@@ -734,13 +787,7 @@ async def twilio_voice_webhook(
     # Validate Twilio signature
     await verify_twilio_webhook(request)
 
-    log = logger.bind(
-        webhook="twilio_voice",
-        call_sid=call_sid,
-        from_number=from_number,
-        to_number=to_number,
-        status=call_status,
-    )
+    log = logger.bind(webhook="twilio_voice", call_ref=effect_digest(call_sid)[:12])
     log.info("twilio_incoming_call")
 
     # Find agent by phone number
@@ -748,7 +795,7 @@ async def twilio_voice_webhook(
     agent_id = str(agent.id) if agent else None
 
     if not agent:
-        log.warning("no_agent_for_number", to_number=to_number)
+        log.warning("no_agent_for_number")
         # Return TwiML that says no agent is available
         return Response(
             content="""<?xml version="1.0" encoding="UTF-8"?>
@@ -762,21 +809,30 @@ async def twilio_voice_webhook(
     # Get workspace for the agent
     agent_workspace_id = await get_agent_workspace_id(agent.id, db)
 
-    # Create call record for inbound call
-    call_record = CallRecord(
-        user_id=agent.user_id,
-        workspace_id=agent_workspace_id,
-        provider="twilio",
-        provider_call_id=call_sid,
-        agent_id=agent.id,
-        direction=CallDirection.INBOUND.value,
-        status=CallStatus.RINGING.value,
-        from_number=from_number,
-        to_number=to_number,
+    claim_result = await acquire_claim(
+        db,
+        scope_key=str(agent_workspace_id or "global"),
+        namespace="twilio.voice",
+        digest=effect_digest(call_sid),
     )
-    db.add(call_record)
-    await db.commit()
-    log.info("call_record_created", record_id=str(call_record.id))
+    if claim_result.disposition == ClaimDisposition.PROCESSING:
+        raise HTTPException(status_code=503, detail="Webhook is already processing")
+    if claim_result.disposition == ClaimDisposition.ACQUIRED:
+        call_record = CallRecord(
+            user_id=agent.user_id,
+            workspace_id=agent_workspace_id,
+            provider="twilio",
+            provider_call_id=call_sid,
+            agent_id=agent.id,
+            direction=CallDirection.INBOUND.value,
+            status=CallStatus.RINGING.value,
+            from_number=from_number,
+            to_number=to_number,
+        )
+        db.add(call_record)
+        await db.commit()
+        await complete_claim(db, claim_result.claim, response="created", provider_ref=call_sid)
+        log.info("call_record_created", record_id=str(call_record.id))
 
     # Build WebSocket URL for media streaming
     base_url = str(request.base_url).rstrip("/")
@@ -810,10 +866,7 @@ async def twilio_status_callback(
     await verify_twilio_webhook(request)
 
     log = logger.bind(
-        webhook="twilio_status",
-        call_sid=call_sid,
-        status=call_status,
-        duration=call_duration,
+        webhook="twilio_status", call_ref=effect_digest(call_sid)[:12], status=call_status
     )
     log.info("twilio_status_update")
 
@@ -822,6 +875,16 @@ async def twilio_status_callback(
     call_record = result.scalar_one_or_none()
 
     if call_record:
+        claim_result = await acquire_claim(
+            db,
+            scope_key=str(call_record.workspace_id or "global"),
+            namespace="twilio.status",
+            digest=effect_digest(f"{call_sid}:{call_status}:{call_duration}"),
+        )
+        if claim_result.disposition == ClaimDisposition.COMPLETED:
+            return {"status": "received"}
+        if claim_result.disposition == ClaimDisposition.PROCESSING:
+            raise HTTPException(status_code=503, detail="Webhook is already processing")
         # Map Twilio status to our status
         status_map = {
             "initiated": CallStatus.INITIATED.value,
@@ -834,12 +897,25 @@ async def twilio_status_callback(
             "canceled": CallStatus.CANCELED.value,
         }
 
-        call_record.status = status_map.get(call_status, call_status)
+        terminal = {
+            CallStatus.COMPLETED.value,
+            CallStatus.BUSY.value,
+            CallStatus.FAILED.value,
+            CallStatus.NO_ANSWER.value,
+            CallStatus.CANCELED.value,
+        }
+        new_status = status_map.get(call_status)
+        was_terminal = call_record.status in terminal
+        if new_status and not (was_terminal and new_status not in terminal):
+            call_record.status = new_status
 
         # Update timestamps based on status
         if call_status == "in-progress" and not call_record.answered_at:
             call_record.answered_at = datetime.now(UTC)
-        elif call_status in ("completed", "busy", "failed", "no-answer", "canceled"):
+        elif (
+            call_status in ("completed", "busy", "failed", "no-answer", "canceled")
+            and not was_terminal
+        ):
             call_record.ended_at = datetime.now(UTC)
             if call_duration:
                 call_record.duration_seconds = int(call_duration)
@@ -852,7 +928,13 @@ async def twilio_status_callback(
                 db=db,
             )
 
-        await db.commit()
+        try:
+            await db.commit()
+            await complete_claim(db, claim_result.claim, response='{"status":"received"}')
+        except Exception:
+            await db.rollback()
+            await fail_claim(db, claim_result.claim)
+            raise
         log.info("call_record_updated", record_id=str(call_record.id), status=call_status)
     else:
         log.warning("call_record_not_found", call_sid=call_sid)
@@ -916,11 +998,7 @@ async def telnyx_voice_webhook(
     event_type = data.get("event_type", "")
 
     log = logger.bind(
-        webhook="telnyx_voice",
-        call_control_id=call_control_id,
-        from_number=from_number,
-        to_number=to_number,
-        event_type=event_type,
+        webhook="telnyx_voice", call_ref=effect_digest(call_control_id)[:12], event_type=event_type
     )
     log.info("telnyx_incoming_call")
 
@@ -929,7 +1007,7 @@ async def telnyx_voice_webhook(
     agent_id = str(agent.id) if agent else None
 
     if not agent:
-        log.warning("no_agent_for_number", to_number=to_number)
+        log.warning("no_agent_for_number")
         return Response(
             content="""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -942,21 +1020,32 @@ async def telnyx_voice_webhook(
     # Get workspace for the agent
     agent_workspace_id = await get_agent_workspace_id(agent.id, db)
 
-    # Create call record for inbound call
-    call_record = CallRecord(
-        user_id=agent.user_id,
-        workspace_id=agent_workspace_id,
-        provider="telnyx",
-        provider_call_id=call_control_id,
-        agent_id=agent.id,
-        direction=CallDirection.INBOUND.value,
-        status=CallStatus.RINGING.value,
-        from_number=from_number,
-        to_number=to_number,
+    claim_result = await acquire_claim(
+        db,
+        scope_key=str(agent_workspace_id or "global"),
+        namespace="telnyx.voice",
+        digest=effect_digest(call_control_id),
     )
-    db.add(call_record)
-    await db.commit()
-    log.info("call_record_created", record_id=str(call_record.id))
+    if claim_result.disposition == ClaimDisposition.PROCESSING:
+        raise HTTPException(status_code=503, detail="Webhook is already processing")
+    if claim_result.disposition == ClaimDisposition.ACQUIRED:
+        call_record = CallRecord(
+            user_id=agent.user_id,
+            workspace_id=agent_workspace_id,
+            provider="telnyx",
+            provider_call_id=call_control_id,
+            agent_id=agent.id,
+            direction=CallDirection.INBOUND.value,
+            status=CallStatus.RINGING.value,
+            from_number=from_number,
+            to_number=to_number,
+        )
+        db.add(call_record)
+        await db.commit()
+        await complete_claim(
+            db, claim_result.claim, response="created", provider_ref=call_control_id
+        )
+        log.info("call_record_created", record_id=str(call_record.id))
 
     # Build WebSocket URL
     base_url = str(request.base_url).rstrip("/")
@@ -999,7 +1088,7 @@ async def telnyx_answer_webhook(
 
 
 @webhook_router.post("/telnyx/status")
-async def telnyx_status_callback(
+async def telnyx_status_callback(  # noqa: PLR0912
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -1019,7 +1108,7 @@ async def telnyx_status_callback(
     log = logger.bind(
         webhook="telnyx_status",
         event_type=event_type,
-        call_control_id=call_control_id,
+        call_ref=effect_digest(call_control_id)[:12],
     )
     log.info("telnyx_status_update")
 
@@ -1030,6 +1119,19 @@ async def telnyx_status_callback(
     call_record = result.scalar_one_or_none()
 
     if call_record:
+        event_id = str(
+            data.get("id") or f"{call_control_id}:{event_type}:{payload.get('occurred_at', '')}"
+        )
+        claim_result = await acquire_claim(
+            db,
+            scope_key=str(call_record.workspace_id or "global"),
+            namespace="telnyx.status",
+            digest=effect_digest(event_id),
+        )
+        if claim_result.disposition == ClaimDisposition.COMPLETED:
+            return {"status": "received"}
+        if claim_result.disposition == ClaimDisposition.PROCESSING:
+            raise HTTPException(status_code=503, detail="Webhook is already processing")
         # Map Telnyx event types to our status
         event_status_map = {
             "call.initiated": CallStatus.INITIATED.value,
@@ -1039,14 +1141,22 @@ async def telnyx_status_callback(
             "call.machine.detection.ended": None,  # Don't change status
         }
 
+        terminal = {
+            CallStatus.COMPLETED.value,
+            CallStatus.BUSY.value,
+            CallStatus.FAILED.value,
+            CallStatus.NO_ANSWER.value,
+            CallStatus.CANCELED.value,
+        }
         new_status = event_status_map.get(event_type)
-        if new_status:
+        was_terminal = call_record.status in terminal
+        if new_status and not (was_terminal and new_status not in terminal):
             call_record.status = new_status
 
         # Update timestamps based on event
         if event_type == "call.answered" and not call_record.answered_at:
             call_record.answered_at = datetime.now(UTC)
-        elif event_type == "call.hangup":
+        elif event_type == "call.hangup" and not was_terminal:
             call_record.ended_at = datetime.now(UTC)
             # Calculate duration if we have answered_at
             if call_record.answered_at:
@@ -1072,9 +1182,15 @@ async def telnyx_status_callback(
                 db=db,
             )
 
-        await db.commit()
+        try:
+            await db.commit()
+            await complete_claim(db, claim_result.claim, response='{"status":"received"}')
+        except Exception:
+            await db.rollback()
+            await fail_claim(db, claim_result.claim)
+            raise
         log.info("call_record_updated", record_id=str(call_record.id), event=event_type)
     else:
-        log.warning("call_record_not_found", call_control_id=call_control_id)
+        log.warning("call_record_not_found", call_ref=effect_digest(call_control_id)[:12])
 
     return {"status": "received"}
