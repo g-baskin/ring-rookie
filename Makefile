@@ -38,8 +38,11 @@ migration-check:
 security-check:
 	gitleaks detect --redact --no-banner
 dependency-check:
-	cd backend && uv export --frozen --no-dev --no-emit-project | uvx --python 3.12 pip-audit -r /dev/stdin --disable-pip --no-deps
-	cd frontend && npm audit --audit-level=high
+	@mkdir -p .audit
+	@cd backend && uv export --frozen --no-dev --no-emit-project | uvx --python 3.12 pip-audit -r /dev/stdin --disable-pip --no-deps --format json --output ../.audit/python.json || test -s ../.audit/python.json
+	@cd frontend && npm audit --omit=dev --audit-level=high --json > ../.audit/npm.json || test -s ../.audit/npm.json
+	@python3 scripts/check_dependency_audit.py --python-report .audit/python.json --npm-report .audit/npm.json
+	@rm -rf .audit
 env-check:
 	python3 scripts/check_env_drift.py
 check: backend-ci frontend-ci env-check
