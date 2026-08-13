@@ -15,6 +15,7 @@ from app.models.usage import AgentBillingConfig, BillingTier, UsageRecord
 from app.models.user import User
 from app.models.user_integration import UserIntegration
 from app.models.user_settings import UserSettings
+from app.models.worker_item import WorkerItem
 from app.models.workspace import AgentWorkspace, Workspace
 
 __all__ = [
@@ -40,5 +41,6 @@ __all__ = [
     "User",
     "UserIntegration",
     "UserSettings",
+    "WorkerItem",
     "Workspace",
 ]
