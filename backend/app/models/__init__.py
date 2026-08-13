@@ -13,6 +13,7 @@ from app.models.privacy_settings import ConsentRecord, PrivacySettings
 from app.models.usage import AgentBillingConfig, BillingTier, UsageRecord
 from app.models.user import User
 from app.models.user_integration import UserIntegration
+from app.models.user_settings import UserSettings
 from app.models.workspace import AgentWorkspace, Workspace
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "UsageRecord",
     "User",
     "UserIntegration",
+    "UserSettings",
     "Workspace",
 ]

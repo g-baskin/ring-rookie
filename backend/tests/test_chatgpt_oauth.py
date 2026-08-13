@@ -2,7 +2,9 @@
 
 import base64
 import json
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -95,3 +97,81 @@ def test_token_response_expiry_is_timezone_aware() -> None:
     assert tokens.expires_at is not None
     assert tokens.expires_at.tzinfo == UTC
     assert tokens.expires_at > datetime.now(UTC)
+
+
+class FakeScalarResult:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    def scalar_one_or_none(self) -> object:
+        return self.value
+
+
+class FakeSession:
+    def __init__(self, connection: object) -> None:
+        self.connection = connection
+        self.commits = 0
+
+    async def execute(self, _statement: object) -> FakeScalarResult:
+        return FakeScalarResult(self.connection)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+@pytest.mark.asyncio
+async def test_get_access_token_returns_valid_workspace_oauth_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "OAUTH_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    connection = SimpleNamespace(
+        credentials={"access_token": chatgpt_oauth.encrypt_token("oauth-access-token")},
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        refresh_token=None,
+    )
+    db = FakeSession(connection)
+
+    token = await chatgpt_oauth.get_access_token(uuid.uuid4(), uuid.uuid4(), db)  # type: ignore[arg-type]
+
+    assert token == "oauth-access-token"
+    assert db.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_token_refreshes_and_rotates_expiring_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "OAUTH_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    connection = SimpleNamespace(
+        credentials={
+            "access_token": chatgpt_oauth.encrypt_token("expired-access-token"),
+            "id_token": chatgpt_oauth.encrypt_token("existing-id-token"),
+        },
+        expires_at=datetime.now(UTC),
+        refresh_token=chatgpt_oauth.encrypt_token("refresh-token"),
+        integration_metadata={},
+        last_used_at=None,
+        updated_at=None,
+    )
+    refreshed = chatgpt_oauth.OAuthTokens(
+        access_token="new-access-token",  # noqa: S106 - synthetic credential
+        refresh_token="new-refresh-token",  # noqa: S106 - synthetic credential
+        id_token=None,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        token_type="Bearer",  # noqa: S106 - OAuth token type
+        scope="openid",
+    )
+
+    async def fake_refresh(refresh_token: str) -> chatgpt_oauth.OAuthTokens:
+        assert refresh_token == "refresh-token"
+        return refreshed
+
+    monkeypatch.setattr(chatgpt_oauth, "refresh_tokens", fake_refresh)
+    db = FakeSession(connection)
+
+    token = await chatgpt_oauth.get_access_token(uuid.uuid4(), uuid.uuid4(), db)  # type: ignore[arg-type]
+
+    assert token == "new-access-token"
+    assert chatgpt_oauth.decrypt_token(connection.credentials["access_token"]) == token
+    assert chatgpt_oauth.decrypt_token(connection.refresh_token) == "new-refresh-token"
+    assert db.commits == 1

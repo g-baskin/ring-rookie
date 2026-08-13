@@ -21,6 +21,7 @@ from app.core.auth import CurrentUser, user_id_to_uuid
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.agent import Agent
+from app.services.chatgpt_oauth import ChatGPTOAuthError, get_access_token
 from app.services.gpt_realtime import GPTRealtimeSession, build_instructions_with_language
 from app.services.tools.registry import ToolRegistry
 
@@ -29,51 +30,50 @@ webrtc_router = APIRouter(prefix="/api/v1/realtime", tags=["realtime-webrtc"])
 logger = structlog.get_logger()
 
 
-async def get_openai_api_key_for_workspace(
+async def get_openai_auth_token_for_workspace(
     user_uuid: uuid.UUID,
     workspace_uuid: uuid.UUID | None,
     db: AsyncSession,
     log: structlog.BoundLogger,
 ) -> str:
-    """Get OpenAI API key for a workspace - strictly isolated, no fallback.
+    """Get workspace OpenAI authentication for Realtime requests.
 
-    Args:
-        user_uuid: User UUID
-        workspace_uuid: Workspace UUID (required for workspace-scoped operations)
-        db: Database session
-        log: Logger instance
-
-    Returns:
-        OpenAI API key
-
-    Raises:
-        HTTPException: If no API key is configured for the workspace
+    A workspace API key remains preferred. When it is absent, use the
+    workspace-scoped OpenAI OAuth access token and refresh it when needed.
     """
     user_settings = await get_user_api_keys(user_uuid, db, workspace_id=workspace_uuid)
     if user_settings and user_settings.openai_api_key:
-        if workspace_uuid:
-            log.info("using_workspace_openai_key", workspace_id=str(workspace_uuid))
-        else:
-            log.info("using_user_level_openai_key")
+        log.info(
+            "using_openai_api_key",
+            workspace_id=str(workspace_uuid) if workspace_uuid else None,
+        )
         return user_settings.openai_api_key
 
-    # If workspace is explicitly specified but has no API key, fail - no fallback
-    # This ensures billing isolation between workspaces
-    if workspace_uuid:
-        log.warning("workspace_missing_openai_key", workspace_id=str(workspace_uuid))
-        raise HTTPException(
-            status_code=400,
-            detail="OpenAI API key not configured for this workspace. Please add it in Settings > Workspace API Keys.",
+    try:
+        oauth_access_token = await get_access_token(user_uuid, workspace_uuid, db)
+    except ChatGPTOAuthError as exc:
+        log.warning(
+            "openai_authentication_unavailable",
+            workspace_id=str(workspace_uuid) if workspace_uuid else None,
+            error=str(exc),
         )
+    else:
+        log.info(
+            "using_openai_oauth",
+            workspace_id=str(workspace_uuid) if workspace_uuid else None,
+        )
+        return oauth_access_token
 
-    # Only fall back to global platform key when no workspace is specified (admin use)
-    if settings.OPENAI_API_KEY:
+    if workspace_uuid is None and settings.OPENAI_API_KEY:
         log.info("using_global_openai_key")
         return settings.OPENAI_API_KEY
 
     raise HTTPException(
         status_code=400,
-        detail="OpenAI API key not configured. Please add it in Settings.",
+        detail=(
+            "OpenAI Authentication is not connected for this workspace. "
+            "Connect OpenAI Authentication in Workspace Settings."
+        ),
     )
 
 
@@ -437,7 +437,9 @@ async def create_webrtc_session(
 
     # Get OpenAI API key (user_uuid for UserSettings lookup)
     workspace_uuid = uuid.UUID(workspace_id)
-    api_key = await get_openai_api_key_for_workspace(user_uuid, workspace_uuid, db, session_logger)
+    api_key = await get_openai_auth_token_for_workspace(
+        user_uuid, workspace_uuid, db, session_logger
+    )
 
     # Get integration credentials for the workspace
     integrations = await get_workspace_integrations(user_uuid, workspace_uuid, db)
@@ -572,15 +574,15 @@ async def get_ephemeral_token(
 
     # Get OpenAI API key (user_uuid for UserSettings lookup)
     workspace_uuid = uuid.UUID(workspace_id) if workspace_id else None
-    api_key = await get_openai_api_key_for_workspace(user_uuid, workspace_uuid, db, token_logger)
+    api_key = await get_openai_auth_token_for_workspace(user_uuid, workspace_uuid, db, token_logger)
 
-    # Build minimal session configuration for ephemeral token request
-    # The SDK will configure instructions, voice, tools etc. after connection via data channel
+    # Build the GA Realtime client-secret request.
+    # Runtime instructions and tools are configured after WebRTC connects.
     agent_voice = agent.voice or "shimmer"
     session_config: dict[str, Any] = {
+        "type": "realtime",
         "model": realtime_model,
-        "modalities": ["audio", "text"],
-        "voice": agent_voice,
+        "audio": {"output": {"voice": agent_voice}},
     }
 
     token_logger.info(
@@ -588,17 +590,16 @@ async def get_ephemeral_token(
         model=session_config["model"],
     )
 
-    # Request ephemeral token from OpenAI Realtime sessions endpoint
-    # The session_config is sent directly as the request body (not wrapped)
+    # Mint a short-lived client secret for the browser's WebRTC connection.
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "https://api.openai.com/v1/realtime/sessions",
+                "https://api.openai.com/v1/realtime/client_secrets",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json=session_config,
+                json={"session": session_config},
                 timeout=30.0,
             )
 
@@ -643,9 +644,12 @@ async def get_ephemeral_token(
                 system_prompt, agent.language
             )
 
-            # Return token data with agent info and tools
+            # Preserve the frontend contract while using the GA API response shape.
             return {
-                "client_secret": token_data.get("client_secret", {}),
+                "client_secret": {
+                    "value": token_data.get("value"),
+                    "expires_at": token_data.get("expires_at"),
+                },
                 "agent": {
                     "id": str(agent.id),
                     "name": agent.name,
@@ -704,7 +708,7 @@ async def save_transcript(
     from datetime import UTC, datetime, timedelta
 
     from app.models.call_record import CallRecord
-    from app.models.workspace import AgentWorkspace
+    from app.models.workspace import AgentWorkspace, Workspace
 
     user_id = current_user.id
     transcript_logger = logger.bind(
@@ -723,9 +727,22 @@ async def save_transcript(
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
-    # Verify user owns this agent
+    # Authorize against the same workspace context used to mint the Realtime token.
     user_uuid = user_id_to_uuid(user_id)
-    if agent.user_id != user_uuid:
+    workspace_uuid = uuid.UUID(workspace_id) if workspace_id else None
+    if workspace_uuid:
+        workspace_access = await db.execute(
+            select(AgentWorkspace)
+            .join(Workspace, Workspace.id == AgentWorkspace.workspace_id)
+            .where(
+                AgentWorkspace.agent_id == agent.id,
+                AgentWorkspace.workspace_id == workspace_uuid,
+                Workspace.user_id == user_id,
+            )
+        )
+        if not workspace_access.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Not authorized to access this agent")
+    elif agent.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this agent")
 
     # Skip if transcript is empty
@@ -733,12 +750,16 @@ async def save_transcript(
         transcript_logger.debug("empty_transcript_skipped")
         return {"success": True, "message": "Empty transcript skipped"}
 
-    # Get workspace for this agent (like embed does)
-    workspace_result = await db.execute(
-        select(AgentWorkspace).where(AgentWorkspace.agent_id == agent.id).limit(1)
-    )
-    agent_workspace = workspace_result.scalar_one_or_none()
-    agent_workspace_id = agent_workspace.workspace_id if agent_workspace else None
+    # Preserve the selected workspace on the test call record.
+    agent_workspace_id: uuid.UUID | None
+    if workspace_uuid:
+        agent_workspace_id = workspace_uuid
+    else:
+        workspace_result = await db.execute(
+            select(AgentWorkspace).where(AgentWorkspace.agent_id == agent.id).limit(1)
+        )
+        agent_workspace = workspace_result.scalar_one_or_none()
+        agent_workspace_id = agent_workspace.workspace_id if agent_workspace else None
 
     # Create call record with proper timestamps
     ended_at = datetime.now(UTC)

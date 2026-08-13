@@ -478,12 +478,14 @@ export default function CallAnalyticsPage() {
                       <p className="mt-1 text-sm text-muted-foreground">
                         Long silences during calls often indicate the agent is waiting too long to
                         respond. Reduce the{" "}
-                        <span className="font-medium text-foreground">Silence Duration</span> setting
-                        to make the agent more responsive.
+                        <span className="font-medium text-foreground">Silence Duration</span>{" "}
+                        setting to make the agent more responsive.
                       </p>
                       <p className="mt-2 text-sm">
                         <span className="text-muted-foreground">Location:</span>{" "}
-                        <span className="font-medium">Agent Settings → Advanced tab → Turn Detection</span>
+                        <span className="font-medium">
+                          Agent Settings → Advanced tab → Turn Detection
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Default: 500ms. Try reducing to 300-400ms for faster responses.
@@ -501,12 +503,14 @@ export default function CallAnalyticsPage() {
                       <p className="mt-1 text-sm text-muted-foreground">
                         Callers may hang up if the agent seems confused or takes too long to help.
                         Update your{" "}
-                        <span className="font-medium text-foreground">System Prompt</span> to be more
-                        direct and provide clear guidance on common questions.
+                        <span className="font-medium text-foreground">System Prompt</span> to be
+                        more direct and provide clear guidance on common questions.
                       </p>
                       <p className="mt-2 text-sm">
                         <span className="text-muted-foreground">Location:</span>{" "}
-                        <span className="font-medium">Agent Settings → AI Model tab → System Prompt</span>
+                        <span className="font-medium">
+                          Agent Settings → AI Model tab → System Prompt
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Tip: Include specific instructions for handling common scenarios quickly.
@@ -522,14 +526,16 @@ export default function CallAnalyticsPage() {
                     <div className="flex-1">
                       <h4 className="font-medium">Lower Temperature for Consistency</h4>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        High temperature values make responses more creative but less predictable. For
-                        business calls, lower the{" "}
+                        High temperature values make responses more creative but less predictable.
+                        For business calls, lower the{" "}
                         <span className="font-medium text-foreground">Temperature</span> to make
                         responses more focused and consistent.
                       </p>
                       <p className="mt-2 text-sm">
                         <span className="text-muted-foreground">Location:</span>{" "}
-                        <span className="font-medium">Agent Settings → AI Model tab → Temperature</span>
+                        <span className="font-medium">
+                          Agent Settings → AI Model tab → Temperature
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Default: 0.7. Try 0.3-0.5 for more focused responses.

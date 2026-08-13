@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.integrations import get_workspace_integrations
 from app.api.settings import get_user_api_keys
 from app.core.auth import user_id_to_uuid
+from app.services.chatgpt_oauth import ChatGPTOAuthError, get_access_token
 from app.services.tools.registry import ToolRegistry
 
 logger = structlog.get_logger()
@@ -169,22 +170,30 @@ class GPTRealtimeSession:
         """Initialize the Realtime session with internal tools."""
         self.logger.info("gpt_realtime_session_initializing")
 
-        # Get user's API keys from settings (uses UUID)
-        # Workspace isolation: only use workspace-specific API keys, no fallback
+        # Prefer the workspace API key for billing isolation. If none is configured,
+        # use the workspace-scoped ChatGPT OAuth bearer token for Realtime access.
         user_settings = await get_user_api_keys(
             self.user_id_uuid, self.db, workspace_id=self.workspace_id
         )
+        api_key = user_settings.openai_api_key if user_settings else None
+        auth_method = "workspace_api_key"
 
-        # Strictly use workspace API key - no fallback to global key for billing isolation
-        if not user_settings or not user_settings.openai_api_key:
-            self.logger.warning("workspace_missing_openai_key", workspace_id=str(self.workspace_id))
-            raise ValueError(
-                "OpenAI API key not configured for this workspace. Please add it in Settings > Workspace API Keys."
-            )
-        api_key = user_settings.openai_api_key
-        self.logger.info("using_workspace_openai_key")
+        if not api_key:
+            try:
+                api_key = await get_access_token(self.user_id_uuid, self.workspace_id, self.db)
+                auth_method = "workspace_oauth"
+            except ChatGPTOAuthError as exc:
+                self.logger.warning(
+                    "openai_credentials_unavailable",
+                    workspace_id=str(self.workspace_id),
+                    error=str(exc),
+                )
+                raise ValueError(
+                    "OpenAI is not connected for this workspace. Connect ChatGPT or add an "
+                    "OpenAI API key in Workspace Settings."
+                ) from exc
 
-        # Initialize OpenAI client with user's or global API key
+        self.logger.info("using_openai_credentials", auth_method=auth_method)
         self.client = AsyncOpenAI(api_key=api_key)
 
         # Get integration credentials for the workspace

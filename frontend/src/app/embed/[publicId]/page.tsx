@@ -3,6 +3,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Mic, MicOff, X, Phone } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
+import {
+  GA_AUDIO_EVENTS,
+  REALTIME_CALL_URL,
+  addEncodedMicrophoneTrack,
+  attachDecodedRemoteAudio,
+  createRealtimeCallRequest,
+} from "@/lib/realtime-webrtc";
 
 interface AgentConfig {
   public_id: string;
@@ -544,10 +551,7 @@ export default function EmbedPage() {
       // Manual WebRTC connection
       const pc = new RTCPeerConnection();
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioTrack = micStream.getAudioTracks()[0];
-      if (audioTrack) {
-        pc.addTrack(audioTrack);
-      }
+      addEncodedMicrophoneTrack(pc, micStream);
 
       // Setup audio analysis for visualization
       setupAudioAnalysis(micStream);
@@ -557,10 +561,7 @@ export default function EmbedPage() {
 
       // Set up audio playback
       const audioElement = document.createElement("audio");
-      audioElement.autoplay = true;
-      pc.ontrack = (event) => {
-        audioElement.srcObject = event.streams[0] ?? null;
-      };
+      attachDecodedRemoteAudio(pc, audioElement);
 
       // Store WebRTC resources for cleanup
       webrtcRef.current = {
@@ -590,14 +591,8 @@ export default function EmbedPage() {
       }
 
       // Connect to OpenAI Realtime API with required header
-      const response = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-          "Content-Type": "application/sdp",
-          Authorization: `Bearer ${ephemeralKey}`,
-          "OpenAI-Beta": "realtime=v1",
-        },
+      const response = await fetch(REALTIME_CALL_URL, {
+        ...createRealtimeCallRequest(ephemeralKey, offer.sdp ?? ""),
         signal: abortController.signal,
       });
 
@@ -639,16 +634,23 @@ export default function EmbedPage() {
 
         // Build session config with tools
         const sessionConfig: Record<string, unknown> = {
+          type: "realtime",
           instructions: tokenData.agent.instructions,
-          voice: tokenData.agent.voice,
-          input_audio_transcription: {
-            model: "whisper-1",
-          },
-          turn_detection: {
-            type: "server_vad",
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 200,
+          audio: {
+            input: {
+              transcription: {
+                model: "whisper-1",
+              },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 200,
+              },
+            },
+            output: {
+              voice: tokenData.agent.voice,
+            },
           },
         };
 
@@ -753,9 +755,9 @@ export default function EmbedPage() {
             setAgentState("listening");
           } else if (data.type === "input_audio_buffer.speech_stopped") {
             setAgentState("thinking");
-          } else if (data.type === "response.audio.delta") {
+          } else if (data.type === GA_AUDIO_EVENTS.outputDelta) {
             setAgentState("speaking");
-          } else if (data.type === "response.audio.done") {
+          } else if (data.type === GA_AUDIO_EVENTS.outputDone) {
             setAgentState("listening");
           } else if (data.type === "response.done") {
             setAgentState("listening");
@@ -780,13 +782,13 @@ export default function EmbedPage() {
               // Save to localStorage for persistence
               saveSessionToStorage();
             }
-          } else if (data.type === "response.audio_transcript.delta") {
+          } else if (data.type === GA_AUDIO_EVENTS.transcriptDelta) {
             // Assistant speech transcript delta
             const delta = data.delta as string;
             if (delta) {
               currentAssistantTextRef.current += delta;
             }
-          } else if (data.type === "response.audio_transcript.done") {
+          } else if (data.type === GA_AUDIO_EVENTS.transcriptDone) {
             // Assistant speech transcript complete - flush to transcript
             if (currentAssistantTextRef.current.trim()) {
               transcriptRef.current.push({
@@ -830,7 +832,15 @@ export default function EmbedPage() {
       setStatus("error");
       cleanup();
     }
-  }, [config, publicId, cleanup, setupAudioAnalysis, endSession, saveSessionToStorage, dismissalStorageKey]);
+  }, [
+    config,
+    publicId,
+    cleanup,
+    setupAudioAnalysis,
+    endSession,
+    saveSessionToStorage,
+    dismissalStorageKey,
+  ]);
 
   // Determine autostart value: URL parameter overrides agent config
   // If URL param is explicitly set, use that; otherwise use agent config

@@ -115,7 +115,8 @@ export default function ConversationAnalyticsPage() {
           percentage:
             analytics.total_conversations > 0
               ? Math.round(
-                  (analytics.conversations_by_efficiency.efficient / analytics.total_conversations) *
+                  (analytics.conversations_by_efficiency.efficient /
+                    analytics.total_conversations) *
                     100
                 )
               : 0,

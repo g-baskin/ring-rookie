@@ -579,9 +579,7 @@ async def export_conversations(
             "ended_at": record.ended_at.isoformat() if record.ended_at else "",
         }
         if request.include_messages:
-            transcript = "\n".join(
-                f"[{m.role}]: {m.content}" for m in record.messages
-            )
+            transcript = "\n".join(f"[{m.role}]: {m.content}" for m in record.messages)
             row["transcript"] = transcript
         writer.writerow(row)
 
@@ -655,7 +653,9 @@ async def analyze_conversations(
 
     for i, record in enumerate(records[:20], 1):
         agent_name = record.agent.name if record.agent else "Unknown"
-        transcripts_text += f"\n--- Conversation {i} (Agent: {agent_name}, Messages: {record.message_count}) ---\n"
+        transcripts_text += (
+            f"\n--- Conversation {i} (Agent: {agent_name}, Messages: {record.message_count}) ---\n"
+        )
         for msg in record.messages[:20]:
             transcripts_text += f"[{msg.role}]: {msg.content[:500]}\n"
         transcripts_text += "\n"

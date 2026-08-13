@@ -197,9 +197,7 @@ export default function ConversationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Chat History</h1>
-          <p className="text-sm text-muted-foreground">
-            View and analyze Chat Champ conversations
-          </p>
+          <p className="text-sm text-muted-foreground">View and analyze Chat Champ conversations</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -233,11 +231,7 @@ export default function ConversationsPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={exportMutation.isPending}
-                  >
+                  <Button variant="outline" size="sm" disabled={exportMutation.isPending}>
                     {exportMutation.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -282,9 +276,7 @@ export default function ConversationsPage() {
             <div className="flex flex-col items-center justify-center py-16">
               <AlertCircle className="mb-4 h-16 w-16 text-destructive" />
               <h3 className="mb-2 text-lg font-semibold">Failed to load conversations</h3>
-              <p className="max-w-sm text-center text-sm text-muted-foreground">
-                {error.message}
-              </p>
+              <p className="max-w-sm text-center text-sm text-muted-foreground">{error.message}</p>
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
@@ -405,9 +397,7 @@ export default function ConversationsPage() {
               <div
                 key={message.id}
                 className={`rounded-lg p-3 ${
-                  message.role === "assistant"
-                    ? "bg-primary/10 ml-4"
-                    : "bg-muted mr-4"
+                  message.role === "assistant" ? "ml-4 bg-primary/10" : "mr-4 bg-muted"
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2">
@@ -418,7 +408,7 @@ export default function ConversationsPage() {
                     {new Date(message.created_at).toLocaleTimeString()}
                   </span>
                 </div>
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap text-sm">{message.content}</p>
               </div>
             ))}
           </div>

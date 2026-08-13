@@ -1,7 +1,7 @@
 services:
   postgres:
-    image: postgres:17-alpine
-    container_name: voice-agent-postgres
+    image: pgvector/pgvector:pg17
+    container_name: ring-rookie-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -31,7 +31,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: voice-agent-redis
+    container_name: ring-rookie-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
@@ -55,9 +55,85 @@ services:
     networks:
       - voice-agent-network
 
+  migrate:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    working_dir: /app
+    command: ["sh", "-c", "uv run python scripts/bootstrap_database.py && uv run alembic upgrade head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/voice_agent
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - voice-agent-network
+
+  backend:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    container_name: ring-rookie-backend
+    restart: unless-stopped
+    working_dir: /app
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/voice_agent
+      REDIS_URL: redis://redis:6379/0
+      CHATGPT_OAUTH_RELAY_HOST: 0.0.0.0
+    ports:
+      - "8000:8000"
+      - "127.0.0.1:1455:1455"
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - voice-agent-network
+
+  frontend:
+    image: node:22-bookworm-slim
+    container_name: ring-rookie-frontend
+    restart: unless-stopped
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --hostname 0.0.0.0"]
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "4173:4173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+      - npm_cache:/root/.npm
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4173').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - voice-agent-network
+
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: voice-agent-pgadmin
+    container_name: ring-rookie-pgadmin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@voiceagent.local
@@ -76,7 +152,7 @@ services:
 
   redis-commander:
     image: rediscommander/redis-commander:latest
-    container_name: voice-agent-redis-commander
+    container_name: ring-rookie-redis-commander
     restart: unless-stopped
     environment:
       - REDIS_HOSTS=local:redis:6379
@@ -95,6 +171,16 @@ volumes:
   redis_data:
     driver: local
   pgadmin_data:
+    driver: local
+  backend_venv:
+    driver: local
+  uv_cache:
+    driver: local
+  frontend_node_modules:
+    driver: local
+  frontend_next:
+    driver: local
+  npm_cache:
     driver: local
 
 networks:

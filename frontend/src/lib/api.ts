@@ -78,11 +78,10 @@ api.interceptors.response.use(
         message: error.response.data?.message ?? error.message,
       });
     } else if (error.request) {
-      // Log network errors
-      console.error("Network error - no response received:", {
-        endpoint: error.config?.url,
-        method: error.config?.method?.toUpperCase(),
-      });
+      // Next.js/Turbopack can serialize console object arguments as `{}`.
+      const endpoint = error.config?.url ?? "unknown";
+      const method = error.config?.method?.toUpperCase() ?? "UNKNOWN";
+      console.error(`Network error - no response received: endpoint=${endpoint} method=${method}`);
     } else {
       // Log request setup errors
       console.error("Request error:", error.message);

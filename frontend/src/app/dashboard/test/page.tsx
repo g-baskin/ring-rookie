@@ -8,8 +8,17 @@ import { toast } from "sonner";
 import { updateAgent } from "@/lib/api/agents";
 import { api } from "@/lib/api";
 import { getWhisperCode, getLanguagesForTier } from "@/lib/languages";
+import {
+  GA_AUDIO_EVENTS,
+  REALTIME_CALL_URL,
+  addEncodedMicrophoneTrack,
+  attachDecodedRemoteAudio,
+  createRealtimeCallRequest,
+  createTranscriptUrl,
+} from "@/lib/realtime-webrtc";
 import { Button } from "@/components/ui/button";
-import { Play, Square, Loader2, Save, FolderOpen } from "lucide-react";
+import { createTranscriptFilename, formatTranscriptExport } from "@/lib/transcript-export";
+import { Play, Square, Loader2, Save, FolderOpen, Download } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -525,7 +534,7 @@ export default function TestAgentPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
       const authToken = localStorage.getItem("access_token");
 
-      const response = await fetch(`${apiBase}/api/v1/realtime/transcript/${agentId}`, {
+      const response = await fetch(createTranscriptUrl(apiBase, agentId, selectedWorkspaceId), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -552,7 +561,7 @@ export default function TestAgentPage() {
     transcriptEntriesRef.current = [];
     sessionIdRef.current = "";
     sessionStartTimeRef.current = 0;
-  }, []);
+  }, [selectedWorkspaceId]);
 
   // Immediate addTranscript for critical messages (system messages during connect)
   const addTranscriptImmediate = useCallback(
@@ -642,13 +651,10 @@ export default function TestAgentPage() {
 
       console.log("[WebRTC] Got ephemeral token:", ephemeralKey.substring(0, 10) + "...");
 
-      // Manual WebRTC connection since SDK doesn't include required OpenAI-Beta header
+      // Manual WebRTC connection for the GA Realtime call endpoint
       const pc = new RTCPeerConnection();
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioTrack = micStream.getAudioTracks()[0];
-      if (audioTrack) {
-        pc.addTrack(audioTrack);
-      }
+      addEncodedMicrophoneTrack(pc, micStream);
       // Store the audio stream for the visualizer
       setAudioStream(micStream);
 
@@ -657,10 +663,7 @@ export default function TestAgentPage() {
 
       // Set up audio playback
       const audioElement = document.createElement("audio");
-      audioElement.autoplay = true;
-      pc.ontrack = (event) => {
-        audioElement.srcObject = event.streams[0] ?? null;
-      };
+      attachDecodedRemoteAudio(pc, audioElement);
 
       // Store WebRTC resources in refs for proper cleanup
       webrtcRef.current = {
@@ -675,15 +678,10 @@ export default function TestAgentPage() {
       await pc.setLocalDescription(offer);
 
       // Connect to OpenAI Realtime API with required header
-      const response = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-          "Content-Type": "application/sdp",
-          Authorization: `Bearer ${ephemeralKey}`,
-          "OpenAI-Beta": "realtime=v1",
-        },
-      });
+      const response = await fetch(
+        REALTIME_CALL_URL,
+        createRealtimeCallRequest(ephemeralKey, offer.sdp ?? "")
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -717,21 +715,28 @@ export default function TestAgentPage() {
         const sessionUpdate = {
           type: "session.update",
           session: {
+            type: "realtime",
             instructions: instructions,
-            voice: voice,
-            input_audio_transcription: {
-              model: "whisper-1",
-              language: getWhisperCode(language) ?? undefined,
+            audio: {
+              input: {
+                transcription: {
+                  model: "whisper-1",
+                  language: getWhisperCode(language) ?? undefined,
+                },
+                turn_detection:
+                  turnDetection === "disabled"
+                    ? null
+                    : {
+                        type: turnDetection === "semantic" ? "semantic_vad" : "server_vad",
+                        threshold: threshold,
+                        prefix_padding_ms: prefixPadding,
+                        silence_duration_ms: silenceDuration,
+                      },
+              },
+              output: {
+                voice: voice,
+              },
             },
-            turn_detection:
-              turnDetection === "disabled"
-                ? null
-                : {
-                    type: turnDetection === "semantic" ? "semantic_vad" : "server_vad",
-                    threshold: threshold,
-                    prefix_padding_ms: prefixPadding,
-                    silence_duration_ms: silenceDuration,
-                  },
             tools: tools,
             tool_choice: tools.length > 0 ? "auto" : "none",
           },
@@ -778,7 +783,7 @@ export default function TestAgentPage() {
                 content: data.transcript.trim(),
               });
             }
-          } else if (data.type === "response.audio_transcript.done") {
+          } else if (data.type === GA_AUDIO_EVENTS.transcriptDone) {
             addTranscriptImmediate("assistant", data.transcript);
             // Also capture for saving to backend
             if (data.transcript?.trim()) {
@@ -907,6 +912,22 @@ export default function TestAgentPage() {
     void handleConnect();
   };
 
+  const handleExportTranscript = () => {
+    if (transcript.length === 0) return;
+
+    const exportedAt = new Date();
+    const blob = new Blob([formatTranscriptExport(transcript, selectedAgent?.name)], {
+      type: "text/plain;charset=utf-8",
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = createTranscriptFilename(selectedAgent?.name, exportedAt);
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    toast.success("Transcript exported locally");
+  };
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -984,6 +1005,18 @@ export default function TestAgentPage() {
                   barCount={12}
                 />
               </div>
+
+              <Button
+                onClick={handleExportTranscript}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={transcript.length === 0}
+                aria-label="Export transcript locally"
+                title="Export transcript locally"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
 
               <Button
                 onClick={handleConnectClick}

@@ -101,24 +101,25 @@ def create_access_token(subject: str | int, expires_delta: timedelta | None = No
 @router.post("/register", response_model=UserResponse)
 @limiter.limit("5/minute")  # Strict rate limit to prevent account spam
 async def register(
-    request: RegisterRequest,
-    http_request: Request,  # Required for rate limiter
+    request: Request,  # Required for rate limiter
+    registration: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Register a new user.
 
     Args:
-        request: Registration request with email, username, password
+        request: HTTP request used by the rate limiter
+        registration: Registration request with email, username, password
         db: Database session
 
     Returns:
         Created user
     """
-    log = logger.bind(email=request.email, username=request.username)
+    log = logger.bind(email=registration.email, username=registration.username)
     log.info("registering_user")
 
     # Check if email already exists
-    result = await db.execute(select(User).where(User.email == request.email))
+    result = await db.execute(select(User).where(User.email == registration.email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -127,9 +128,9 @@ async def register(
 
     # Create user (username is stored as full_name)
     user = User(
-        email=request.email,
-        full_name=request.username,
-        hashed_password=get_password_hash(request.password),
+        email=registration.email,
+        full_name=registration.username,
+        hashed_password=get_password_hash(registration.password),
     )
     db.add(user)
     await db.commit()

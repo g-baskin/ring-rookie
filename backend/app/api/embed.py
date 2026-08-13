@@ -488,7 +488,7 @@ async def get_embed_ephemeral_token(  # noqa: PLR0915
     """
     import httpx
 
-    from app.api.settings import get_user_api_keys
+    from app.api.realtime import get_openai_auth_token_for_workspace
     from app.core.auth import user_id_to_uuid
     from app.models.workspace import AgentWorkspace
     from app.services.gpt_realtime import build_instructions_with_language
@@ -530,49 +530,37 @@ async def get_embed_ephemeral_token(  # noqa: PLR0915
         log.warning("no_workspace_for_agent")
         raise HTTPException(status_code=500, detail="Agent not configured properly")
 
-    # Get OpenAI API key - agent.user_id is now directly the integer user ID
+    # Use workspace OpenAI Authentication, with API key compatibility.
     user_uuid = user_id_to_uuid(agent.user_id)
-    user_settings = await get_user_api_keys(
-        user_uuid, db, workspace_id=agent_workspace.workspace_id
+    api_key = await get_openai_auth_token_for_workspace(
+        user_uuid, agent_workspace.workspace_id, db, log
     )
 
-    # Strictly use workspace API key - no fallback to global key for billing isolation
-    if not user_settings or not user_settings.openai_api_key:
-        log.warning("workspace_missing_openai_key", workspace_id=str(agent_workspace.workspace_id))
-        raise HTTPException(
-            status_code=400,
-            detail="OpenAI API key not configured for this workspace. Please add it in Settings > Workspace API Keys.",
-        )
-    api_key = user_settings.openai_api_key
-    log.info("using_workspace_openai_key")
-
-    # Determine model based on tier
+    # Determine the GA model based on tier.
     realtime_model = (
-        "gpt-4o-mini-realtime-preview-2024-12-17"
-        if agent.pricing_tier == "premium-mini"
-        else "gpt-realtime-2025-08-28"
+        "gpt-realtime-mini" if agent.pricing_tier == "premium-mini" else "gpt-realtime-2025-08-28"
     )
 
-    # Build session configuration
+    # Build the GA Realtime client-secret request.
     agent_voice = agent.voice or "marin"
     session_config: dict[str, Any] = {
+        "type": "realtime",
         "model": realtime_model,
-        "modalities": ["audio", "text"],
-        "voice": agent_voice,
+        "audio": {"output": {"voice": agent_voice}},
     }
 
     log.info("requesting_ephemeral_token", model=realtime_model)
 
-    # Request ephemeral token from OpenAI
+    # Request a short-lived GA client secret from OpenAI.
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "https://api.openai.com/v1/realtime/sessions",
+                "https://api.openai.com/v1/realtime/client_secrets",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json=session_config,
+                json={"session": session_config},
                 timeout=30.0,
             )
 
@@ -638,7 +626,10 @@ async def get_embed_ephemeral_token(  # noqa: PLR0915
             )
 
             return {
-                "client_secret": token_data.get("client_secret", {}),
+                "client_secret": {
+                    "value": token_data.get("value"),
+                    "expires_at": token_data.get("expires_at"),
+                },
                 "agent": {
                     "name": agent.name,
                     "voice": agent_voice,

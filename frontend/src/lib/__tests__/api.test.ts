@@ -122,21 +122,18 @@ describe("Response Interceptor - Error Logging", () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
-  it("logs network errors", () => {
-    const error = {
-      request: {},
-      config: {
-        url: "/api/test",
-        method: "get",
-      },
-    };
+  it("logs network errors with endpoint and uppercase method", async () => {
+    await expect(
+      api.get("/api/test", {
+        adapter: async (config) => {
+          throw { request: {}, config };
+        },
+      })
+    ).rejects.toBeDefined();
 
-    console.error("Network error - no response received:", {
-      endpoint: error.config.url,
-      method: error.config.method.toUpperCase(),
-    });
-
-    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Network error - no response received: endpoint=/api/test method=GET"
+    );
   });
 
   it("logs request setup errors", () => {

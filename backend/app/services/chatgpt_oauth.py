@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -11,9 +12,12 @@ from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.redis import get_redis
+from app.models.user_integration import UserIntegration
 from app.services.oauth_callback_relay import ensure_callback_relay
 
 CHATGPT_INTEGRATION_ID = "chatgpt-codex"
@@ -230,3 +234,67 @@ async def refresh_tokens(refresh_token: str) -> OAuthTokens:
             "client_id": settings.CHATGPT_OAUTH_CLIENT_ID,
         }
     )
+
+
+async def get_access_token(
+    user_id: uuid.UUID, workspace_id: uuid.UUID | None, db: AsyncSession
+) -> str:
+    """Return a valid workspace-scoped ChatGPT OAuth access token.
+
+    Refreshes expiring credentials and persists rotated bearer tokens before use.
+    """
+    workspace_condition = (
+        UserIntegration.workspace_id == workspace_id
+        if workspace_id is not None
+        else UserIntegration.workspace_id.is_(None)
+    )
+    result = await db.execute(
+        select(UserIntegration).where(
+            and_(
+                UserIntegration.user_id == user_id,
+                UserIntegration.integration_id == CHATGPT_INTEGRATION_ID,
+                UserIntegration.is_active.is_(True),
+                workspace_condition,
+            )
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if connection is None:
+        raise ChatGPTOAuthError("ChatGPT is not connected for this workspace")
+
+    encrypted_access_token = connection.credentials.get("access_token")
+    if not isinstance(encrypted_access_token, str) or not encrypted_access_token:
+        raise ChatGPTOAuthError("Stored ChatGPT credentials are incomplete")
+
+    refresh_deadline = datetime.now(UTC) + timedelta(minutes=1)
+    if connection.expires_at is None or connection.expires_at > refresh_deadline:
+        return decrypt_token(encrypted_access_token)
+
+    if not connection.refresh_token:
+        raise ChatGPTOAuthError("ChatGPT access expired; reconnect the workspace")
+
+    tokens = await refresh_tokens(decrypt_token(connection.refresh_token))
+    credentials = {
+        "access_token": encrypt_token(tokens.access_token),
+        "token_type": tokens.token_type,
+    }
+    if tokens.id_token:
+        credentials["id_token"] = encrypt_token(tokens.id_token)
+    elif isinstance(connection.credentials.get("id_token"), str):
+        credentials["id_token"] = connection.credentials["id_token"]
+
+    connection.credentials = credentials
+    if tokens.refresh_token:
+        connection.refresh_token = encrypt_token(tokens.refresh_token)
+    connection.expires_at = tokens.expires_at
+    connection.integration_metadata = {
+        **(connection.integration_metadata or {}),
+        **token_metadata(tokens.access_token),
+        **token_metadata(tokens.id_token),
+        "scope": tokens.scope,
+        "auth_method": "oauth_pkce",
+    }
+    connection.last_used_at = datetime.now(UTC)
+    connection.updated_at = datetime.now(UTC)
+    await db.commit()
+    return tokens.access_token
