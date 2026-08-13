@@ -16,6 +16,8 @@ make security-check dependency-check
 
 `backend/tests/ci-known-failures.txt` temporarily deselects the 17 legacy failures exposed when CI was introduced. CI runs every other test and enforces the measured 37% coverage baseline; delete entries as defects are repaired, and never add one without a tracked issue and owner.
 
+`backend/migrations/schema-drift-baseline.sha256` fingerprints the pre-existing ORM/migration drift. `make migration-check` fails if that drift changes; remove the baseline after a dedicated schema-reconciliation migration makes `alembic check` clean.
+
 ## Required GitHub repository settings
 
 Maintainers must configure settings that files cannot enforce:

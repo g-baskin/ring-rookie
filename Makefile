@@ -33,7 +33,8 @@ frontend-ci:
 	cd frontend && npm ci && npm run lint && npm run type-check && npm run format:check && npm test && npm run build
 migration-check:
 	@test "$$(cd backend && uv run alembic heads | grep -c '(head)')" = 1
-	cd backend && uv run alembic upgrade head && uv run alembic check
+	cd backend && uv run alembic upgrade head
+	python3 scripts/check_alembic_drift.py
 	cd backend && uv run alembic downgrade -1 && uv run alembic upgrade head
 security-check:
 	gitleaks detect --redact --no-banner

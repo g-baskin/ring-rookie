@@ -58,6 +58,7 @@ def _ensure_version_column_capacity(connection: Connection) -> None:
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
     _ensure_version_column_capacity(connection)
+    connection.commit()
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
