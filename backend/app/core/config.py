@@ -118,6 +118,15 @@ class Settings(BaseSettings):
     DEEPGRAM_API_KEY: str | None = None
     ELEVENLABS_API_KEY: str | None = None
 
+    # ChatGPT/Codex OAuth (separate from OpenAI Platform API credentials)
+    CHATGPT_OAUTH_ISSUER: str = "https://auth.openai.com"
+    CHATGPT_OAUTH_CLIENT_ID: str = "app_EMoamEEZ73f0CkXaXp7hrann"
+    CHATGPT_OAUTH_CALLBACK_URL: str = "http://localhost:1455/auth/callback"
+    CHATGPT_OAUTH_APP_CALLBACK_URL: str = "http://localhost:8000/api/v1/oauth/chatgpt/callback"
+    CHATGPT_OAUTH_RELAY_HOST: str = "127.0.0.1"
+    CHATGPT_OAUTH_FRONTEND_URL: str = "http://localhost:4173/dashboard/settings"
+    OAUTH_TOKEN_ENCRYPTION_KEY: str | None = None
+
     # Telephony
     TELNYX_API_KEY: str | None = None
     TELNYX_PUBLIC_KEY: str | None = None

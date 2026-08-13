@@ -27,6 +27,7 @@ from app.api import (
     calls,
     campaigns,
     chat,
+    chatgpt_oauth,
     compliance,
     conversations,
     crm,
@@ -200,6 +201,7 @@ app.include_router(crm.router, prefix=settings.API_V1_PREFIX)
 app.include_router(workspaces.router, prefix=settings.API_V1_PREFIX)
 app.include_router(agents.router)
 app.include_router(settings_api.router)
+app.include_router(chatgpt_oauth.router)
 app.include_router(realtime.router)
 app.include_router(realtime.webrtc_router)  # WebRTC session endpoint
 app.include_router(tools.router)  # Tool execution endpoint

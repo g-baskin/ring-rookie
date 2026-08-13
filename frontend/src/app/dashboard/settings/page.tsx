@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  connectChatGPT,
+  disconnectChatGPT,
+  fetchChatGPTStatus,
   fetchSettings,
+  refreshChatGPT,
   updateSettings,
+  type ChatGPTConnectionStatus,
   type SettingsResponse,
   type UpdateSettingsRequest,
 } from "@/lib/api/settings";
@@ -51,6 +56,8 @@ import {
   EyeOff,
   ExternalLink,
   Brain,
+  Bot,
+  RefreshCw,
   Mic,
   Volume2,
   Phone,
@@ -82,9 +89,9 @@ interface ApiKeyProvider {
 const API_KEY_PROVIDERS: ApiKeyProvider[] = [
   {
     id: "openai",
-    name: "OpenAI",
+    name: "OpenAI API Key",
     description:
-      "Powers the AI brain of your voice agents with GPT-4o for language understanding and responses.",
+      "Usage-based Platform credential for voice agents, realtime responses, RAG, and Chat Champ.",
     category: "voice-ai",
     icon: Brain,
     documentationUrl: "https://platform.openai.com/api-keys",
@@ -181,18 +188,40 @@ export default function SettingsPage() {
     },
   });
 
+  const scopedWorkspaceId = selectedWorkspaceId === "all" ? undefined : selectedWorkspaceId;
+
   // Fetch existing settings for selected workspace
   const { data: settings } = useQuery({
     queryKey: ["settings", selectedWorkspaceId],
-    queryFn: () => fetchSettings(selectedWorkspaceId === "all" ? undefined : selectedWorkspaceId),
+    queryFn: () => fetchSettings(scopedWorkspaceId),
   });
+  const { data: chatGPTStatus } = useQuery({
+    queryKey: ["chatgpt-status", selectedWorkspaceId],
+    queryFn: () => fetchChatGPTStatus(scopedWorkspaceId),
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("chatgpt_oauth");
+    if (!result) return;
+    if (result === "connected") {
+      toast.success("ChatGPT connected successfully");
+    } else {
+      toast.error("ChatGPT connection failed. Please try again.");
+    }
+    params.delete("chatgpt_oauth");
+    params.delete("chatgpt_oauth_detail");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, []);
 
   const voiceAiProviders = API_KEY_PROVIDERS.filter((p) => p.category === "voice-ai");
   const telephonyProviders = API_KEY_PROVIDERS.filter((p) => p.category === "telephony");
 
-  const connectedCount = API_KEY_PROVIDERS.filter((provider) =>
-    provider.fields.some((field) => settings?.[field.settingsKey])
-  ).length;
+  const connectedCount =
+    API_KEY_PROVIDERS.filter((provider) =>
+      provider.fields.some((field) => settings?.[field.settingsKey])
+    ).length + (chatGPTStatus?.connected ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -241,7 +270,7 @@ export default function SettingsPage() {
               {connectedCount} Connected
             </Badge>
             <Badge variant="outline" className="font-normal">
-              {API_KEY_PROVIDERS.length} Available
+              {API_KEY_PROVIDERS.length + 1} Available
             </Badge>
           </div>
         </div>
@@ -256,14 +285,13 @@ export default function SettingsPage() {
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <ChatGPTOAuthCard status={chatGPTStatus} workspaceId={scopedWorkspaceId} />
               {voiceAiProviders.map((provider) => (
                 <ApiKeyCard
                   key={provider.id}
                   provider={provider}
                   settings={settings}
-                  selectedWorkspaceId={
-                    selectedWorkspaceId === "all" ? undefined : selectedWorkspaceId
-                  }
+                  selectedWorkspaceId={scopedWorkspaceId}
                 />
               ))}
             </div>
@@ -315,6 +343,135 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+const ChatGPTOAuthCard = memo(function ChatGPTOAuthCard({
+  status,
+  workspaceId,
+}: {
+  status?: ChatGPTConnectionStatus;
+  workspaceId?: string;
+}) {
+  const queryClient = useQueryClient();
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+
+  const connectMutation = useMutation({
+    mutationFn: () => connectChatGPT(workspaceId),
+    onSuccess: ({ authorization_url }) => {
+      window.location.assign(authorization_url);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const refreshMutation = useMutation({
+    mutationFn: () => refreshChatGPT(workspaceId),
+    onSuccess: () => {
+      toast.success("ChatGPT credentials refreshed");
+      void queryClient.invalidateQueries({ queryKey: ["chatgpt-status"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const disconnectMutation = useMutation({
+    mutationFn: () => disconnectChatGPT(workspaceId),
+    onSuccess: () => {
+      toast.success("ChatGPT disconnected");
+      setShowDisconnectDialog(false);
+      void queryClient.invalidateQueries({ queryKey: ["chatgpt-status"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const accountLabel = status?.account_email ?? status?.account_name;
+  const pending =
+    connectMutation.isPending || refreshMutation.isPending || disconnectMutation.isPending;
+
+  return (
+    <Card className="group transition-all hover:border-primary/50">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
+              <Bot className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-medium">OpenAI</h3>
+              <p className="text-xs text-muted-foreground">ChatGPT OAuth · Codex</p>
+            </div>
+          </div>
+          {status?.connected && <Check className="h-4 w-4 shrink-0 text-green-500" />}
+        </div>
+        <p className="mt-2.5 line-clamp-2 min-h-[2lh] text-xs text-muted-foreground">
+          Connect OpenAI with your ChatGPT subscription for Codex. Voice agents, RAG, and Chat Champ
+          still use the separate OpenAI API key.
+        </p>
+        {status?.connected && (
+          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+            <p className="truncate">{accountLabel ?? "ChatGPT account connected"}</p>
+            {status.plan_type && <p className="capitalize">{status.plan_type} plan</p>}
+          </div>
+        )}
+        <div className="mt-3 flex gap-2 border-t border-border/50 pt-3">
+          {status?.connected ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 flex-1 text-xs"
+                disabled={pending || !status.can_refresh}
+                onClick={() => refreshMutation.mutate()}
+              >
+                {refreshMutation.isPending ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                )}
+                Refresh
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive"
+                disabled={pending}
+                onClick={() => setShowDisconnectDialog(true)}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Disconnect
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              className="h-7 flex-1 text-xs"
+              disabled={pending}
+              onClick={() => connectMutation.mutate()}
+            >
+              {connectMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              Connect OpenAI
+            </Button>
+          )}
+        </div>
+      </CardContent>
+      <AlertDialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect ChatGPT?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ring Rookie will permanently delete the stored OAuth credentials for this selected
+              workspace scope. Your OpenAI API key is not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => disconnectMutation.mutate()}
+            >
+              Disconnect
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+});
 
 const ApiKeyCard = memo(function ApiKeyCard({
   provider,

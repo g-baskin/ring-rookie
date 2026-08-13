@@ -50,6 +50,7 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.1",
     "pytz>=2025.2",
+    "cryptography>=45.0.0",
 ]
 
 [project.optional-dependencies]

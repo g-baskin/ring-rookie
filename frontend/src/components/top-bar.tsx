@@ -121,9 +121,9 @@ export function TopBar() {
 
   return (
     <>
-      <div className="flex h-12 items-center justify-between bg-sidebar px-4">
+      <div className="flex h-12 items-center justify-between overflow-hidden bg-sidebar px-2 sm:px-4">
         {/* Left side - Compliance badges */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           {complianceStatus && (
             <>
               <Shield className="h-3.5 w-3.5 text-muted-foreground" />
@@ -142,7 +142,7 @@ export function TopBar() {
         </div>
 
         {/* Right side - Stats */}
-        <div className="flex items-center gap-6">
+        <div className="hidden items-center gap-6 lg:flex">
           <StatItem icon={Bot} label="Agents" value={agents?.length} isLoading={agentsLoading} />
           <StatItem
             icon={FolderOpen}

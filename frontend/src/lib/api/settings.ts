@@ -63,6 +63,53 @@ export interface UpdateSettingsRequest {
   twilio_auth_token?: string;
 }
 
+export interface ChatGPTConnectionStatus {
+  connected: boolean;
+  workspace_id: string | null;
+  account_email: string | null;
+  account_name: string | null;
+  plan_type: string | null;
+  expires_at: string | null;
+  can_refresh: boolean;
+  updated_at: string | null;
+}
+
+function workspaceParams(workspaceId?: string): string {
+  return workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+}
+
+async function chatGPTRequest<T>(
+  path: string,
+  method: "GET" | "POST" | "DELETE",
+  workspaceId?: string
+): Promise<T> {
+  const response = await fetchWithTimeout(
+    `${API_BASE}/api/v1/oauth/chatgpt${path}${workspaceParams(workspaceId)}`,
+    { method }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail ?? "ChatGPT connection request failed");
+  }
+  return response.json();
+}
+
+export function fetchChatGPTStatus(workspaceId?: string): Promise<ChatGPTConnectionStatus> {
+  return chatGPTRequest("/status", "GET", workspaceId);
+}
+
+export function connectChatGPT(workspaceId?: string): Promise<{ authorization_url: string }> {
+  return chatGPTRequest("/connect", "POST", workspaceId);
+}
+
+export function refreshChatGPT(workspaceId?: string): Promise<ChatGPTConnectionStatus> {
+  return chatGPTRequest("/refresh", "POST", workspaceId);
+}
+
+export function disconnectChatGPT(workspaceId?: string): Promise<{ message: string }> {
+  return chatGPTRequest("/connection", "DELETE", workspaceId);
+}
+
 export async function fetchSettings(workspaceId?: string): Promise<SettingsResponse> {
   const params = workspaceId ? `?workspace_id=${workspaceId}` : "";
   const response = await fetchWithTimeout(`${API_BASE}/api/v1/settings${params}`);

@@ -568,7 +568,6 @@ class VoiceAgentElement extends HTMLElement {
     } catch {
       // sessionStorage might not be available
     }
-
     this.render();
 
     // Set up message handler
@@ -683,7 +682,7 @@ class VoiceAgentElement extends HTMLElement {
       <div class="va-widget-container ${this.position} ${containerThemeClass}" id="container">
         <div class="va-widget-popup" id="popup">
           <iframe
-            src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}${this.autostartSet ? `&autostart=${this.autostart}` : ""}"
+            src="${this.baseUrl}/embed/${this.agentId}?theme=${this.theme}${this.isDismissed ? "&autostart=false" : this.autostartSet ? `&autostart=${this.autostart}` : ""}"
             allow="microphone"
             title="Voice Agent"
           ></iframe>
