@@ -38,7 +38,7 @@ migration-check:
 security-check:
 	gitleaks detect --redact --no-banner
 dependency-check:
-	cd backend && uv export --frozen --no-dev | uvx pip-audit -r /dev/stdin
+	cd backend && uv export --frozen --no-dev --no-emit-project | uvx --python 3.12 pip-audit -r /dev/stdin --disable-pip --no-deps
 	cd frontend && npm audit --audit-level=high
 env-check:
 	python3 scripts/check_env_drift.py

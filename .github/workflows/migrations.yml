@@ -1,10 +1,15 @@
 name: Migrations
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+    branches: [main]
 permissions: {contents: read}
-concurrency: {group: "migrations-${{ github.ref }}", cancel-in-progress: true}
+concurrency:
+  group: "migrations-${{ github.head_ref || github.ref }}"
+  cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
 jobs:
   migration-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: pgvector/pgvector:pg17
