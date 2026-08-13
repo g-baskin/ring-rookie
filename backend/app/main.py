@@ -35,6 +35,7 @@ from app.api import (
     health,
     integrations,
     knowledge_base,
+    lessons,
     phone_numbers,
     realtime,
     telephony,
@@ -218,6 +219,7 @@ app.include_router(embed.router)  # Public embed API (unauthenticated)
 app.include_router(embed.ws_router)  # Public embed WebSocket
 app.include_router(chat.router)  # Public text chat API (unauthenticated)
 app.include_router(knowledge_base.router)  # Knowledge base management (Chat Champ)
+app.include_router(lessons.router)  # User-authored lessons linked to owned test calls
 app.include_router(usage.router)  # Usage metering and billing (Chat Champ)
 app.include_router(conversations.router)  # Conversation history API (Chat Champ)
 

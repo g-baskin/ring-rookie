@@ -18,7 +18,10 @@ import {
 } from "@/lib/realtime-webrtc";
 import { Button } from "@/components/ui/button";
 import { createTranscriptFilename, formatTranscriptExport } from "@/lib/transcript-export";
-import { Play, Square, Loader2, Save, FolderOpen, Download } from "lucide-react";
+import { Play, Square, Loader2, Save, FolderOpen, Download, BookOpen } from "lucide-react";
+import { LessonDialog } from "./lesson-dialog";
+import { LessonsPanel } from "./lessons-panel";
+import type { Lesson } from "@/lib/api/lessons";
 import {
   Select,
   SelectContent,
@@ -233,6 +236,9 @@ export default function TestAgentPage() {
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
   const [callDuration, setCallDuration] = useState(0);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [savedCallId, setSavedCallId] = useState<string | null>(null);
+  const [lessonDialogOpen, setLessonDialogOpen] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
 
   // Ref to track selected agent ID for use in callbacks (avoids stale closures)
   const selectedAgentIdRef = useRef<string>("");
@@ -551,7 +557,11 @@ export default function TestAgentPage() {
         const errorText = await response.text();
         console.error("[Transcript] Failed to save:", response.status, errorText);
       } else {
-        console.log("[Transcript] Saved transcript to backend successfully");
+        const result = (await response.json()) as { call_id: string };
+        setSavedCallId(result.call_id);
+        console.log("[Transcript] Saved transcript to backend successfully", {
+          callId: result.call_id,
+        });
       }
     } catch (error) {
       console.error("[Transcript] Failed to save transcript:", error);
@@ -621,6 +631,7 @@ export default function TestAgentPage() {
     transcriptEntriesRef.current = [];
     sessionIdRef.current = crypto.randomUUID();
     sessionStartTimeRef.current = Date.now();
+    setSavedCallId(null);
 
     try {
       addTranscriptImmediate("system", `Connecting to ${selectedAgent.name}...`);
@@ -1019,6 +1030,21 @@ export default function TestAgentPage() {
               </Button>
 
               <Button
+                type="button"
+                onClick={() => {
+                  setEditingLesson(null);
+                  setLessonDialogOpen(true);
+                }}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={!savedCallId || !selectedAgentId}
+                aria-label="Save lesson from completed transcript"
+                title={savedCallId ? "Save lesson" : "Finish and save a transcript first"}
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+              <Button
                 onClick={handleConnectClick}
                 variant={connectionStatus === "connected" ? "destructive" : "default"}
                 size="sm"
@@ -1052,8 +1078,8 @@ export default function TestAgentPage() {
         </div>
 
         {/* Right - Settings Panel */}
-        <div className="flex w-[320px] shrink-0 flex-col border-l bg-muted/20">
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="flex w-[320px] max-w-[60vw] shrink-0 flex-col border-l bg-muted/20 sm:max-w-none">
+          <div className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
             {/* Workspace Selection */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">
@@ -1117,6 +1143,20 @@ export default function TestAgentPage() {
                   </p>
                 )}
             </div>
+
+            {selectedAgentId && (
+              <>
+                <Separator />
+                <LessonsPanel
+                  agentId={selectedAgentId}
+                  workspaceId={selectedWorkspaceId === "all" ? null : selectedWorkspaceId}
+                  onEdit={(lesson) => {
+                    setEditingLesson(lesson);
+                    setLessonDialogOpen(true);
+                  }}
+                />
+              </>
+            )}
 
             <Separator />
 
@@ -1262,6 +1302,23 @@ export default function TestAgentPage() {
           </div>
         </div>
       </div>
+      <LessonDialog
+        agentId={selectedAgentId}
+        workspaceId={selectedWorkspaceId === "all" ? null : selectedWorkspaceId}
+        sourceCallId={savedCallId}
+        lesson={editingLesson}
+        open={lessonDialogOpen}
+        onOpenChange={setLessonDialogOpen}
+        onSaved={() =>
+          void queryClient.invalidateQueries({
+            queryKey: [
+              "lessons",
+              selectedAgentId,
+              selectedWorkspaceId === "all" ? null : selectedWorkspaceId,
+            ],
+          })
+        }
+      />
     </div>
   );
 }
