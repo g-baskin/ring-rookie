@@ -14,7 +14,7 @@ Prefixes are not globally uniform. CRM, workspaces, and campaigns receive `/api/
 | Prefix                                     | Methods and resources                                                           |
 | ------------------------------------------ | ------------------------------------------------------------------------------- |
 | `/api/v1/auth`                             | register, login, current user.                                                  |
-| `/api/v1/agents`                           | CRUD; embed config; regenerate public ID.                                       |
+| `/api/v1/agents`                           | CRUD; phone assignment/reassignment; embed config; regenerate public ID.        |
 | `/api/v1/calls`                            | list/detail, analytics, agent stats, export, analyze.                           |
 | `/api/v1/conversations`                    | list/detail, analytics, export, analyze.                                        |
 | `/api/v1/integrations`                     | list/detail/connect/update/disconnect.                                          |
@@ -24,7 +24,7 @@ Prefixes are not globally uniform. CRM, workspaces, and campaigns receive `/api/
 | `/api/v1/oauth/chatgpt`                    | connect, callback, status, refresh, disconnect.                                 |
 | `/api/v1/agents/{agent_id}/lessons`        | CRUD and CSV/JSON exports.                                                      |
 | `/api/v1/realtime`                         | WebRTC session, ephemeral token, transcript save.                               |
-| `/api/v1/telephony`                        | provider number search/purchase/release; call start/hangup.                     |
+| `/api/v1/telephony`                        | provider number list/search/purchase/release; assignment metadata; calls.       |
 | `/api/v1/tools/execute`                    | direct tool execution.                                                          |
 | `/api/v1/workspaces`                       | workspace CRUD and agent membership.                                            |
 | `/api/v1/crm`                              | contacts, appointments, requirements, stats.                                    |
@@ -49,6 +49,10 @@ Prefixes are not globally uniform. CRM, workspaces, and campaigns receive `/api/
 ## Public-ID security boundary
 
 Agent `public_id` locates published/embed-enabled behavior without owner JWT. Public embed requests validate origin against `allowed_domains`; wildcard subdomains are supported, and null origins are conditionally accepted for localhost development. Public text chat also enforces agent availability and usage/rate controls. Public history endpoints must constrain data by conversation/session semantics rather than trusting caller-supplied IDs alone.
+
+## Agent phone assignment contract
+
+`GET /api/v1/telephony/phone-numbers` lists live Twilio/Telnyx inventory at account or workspace credential scope and enriches each number with the current user's `assigned_agent_id`. `PUT /api/v1/agents/{agent_id}` accepts a concrete `phone_number_id` for assignment/reassignment or explicit `null` for unassignment. The target update is owner-authorized; reassignment only clears equivalent assignments on other agents owned by that user. Inbound lookup compares stored and received values with an optional-leading-plus normalization. See [Agent phone-number assignment](../voice/agent-phone-number-assignment.md).
 
 ## Telephony callback boundary
 

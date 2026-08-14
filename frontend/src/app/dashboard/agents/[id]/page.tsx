@@ -424,11 +424,14 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
   const selectedWorkspaces = form.watch("selectedWorkspaces");
   const telephonyProvider = form.watch("telephonyProvider");
 
-  // Fetch phone numbers from the first selected workspace
+  // Fetch numbers for the selected workspace, or account-level numbers when unassigned.
   const { data: phoneNumbers = [], isLoading: isLoadingPhoneNumbers } = useQuery({
-    queryKey: ["phone-numbers", selectedWorkspaces[0], telephonyProvider],
+    queryKey: ["phone-numbers", selectedWorkspaces[0] ?? null, telephonyProvider],
     queryFn: async () => {
-      if (!selectedWorkspaces[0]) return [];
+      const searchParams = new URLSearchParams({ provider: telephonyProvider });
+      if (selectedWorkspaces[0]) {
+        searchParams.set("workspace_id", selectedWorkspaces[0]);
+      }
       const response = await api.get<
         Array<{
           id: string;
@@ -437,12 +440,10 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
           provider: string;
           assigned_agent_id: string | null;
         }>
-      >(
-        `/api/v1/telephony/phone-numbers?workspace_id=${selectedWorkspaces[0]}&provider=${telephonyProvider}`
-      );
+      >(`/api/v1/telephony/phone-numbers?${searchParams.toString()}`);
       return response.data;
     },
-    enabled: !!selectedWorkspaces[0] && !!agent && !isDeleting,
+    enabled: !!agent && !isDeleting,
   });
 
   // Watch the LLM provider to conditionally show/hide Voice tab
@@ -595,7 +596,8 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       voice: data.voice,
       enabled_tools: enabledIntegrations,
       enabled_tool_ids: data.enabledToolIds,
-      phone_number_id: data.phoneNumberId,
+      phone_number_id:
+        data.phoneNumberId && data.phoneNumberId !== "none" ? data.phoneNumberId : null,
       enable_recording: data.enableRecording,
       enable_transcript: data.enableTranscript,
       is_active: data.isActive,
@@ -1630,14 +1632,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Phone Number for Inbound Calls</FormLabel>
-                        {selectedWorkspaces.length === 0 ? (
-                          <div className="rounded-lg border border-dashed p-4">
-                            <p className="text-sm text-muted-foreground">
-                              Please select a workspace in the Basic tab first to see available
-                              phone numbers.
-                            </p>
-                          </div>
-                        ) : phoneNumbers.length === 0 && !isLoadingPhoneNumbers ? (
+                        {phoneNumbers.length === 0 && !isLoadingPhoneNumbers ? (
                           <div className="rounded-lg border border-dashed p-4">
                             <div className="flex items-center justify-between">
                               <div className="space-y-1">
@@ -1670,7 +1665,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                                   No phone number (inbound disabled)
                                 </SelectItem>
                                 {phoneNumbers.map((pn) => (
-                                  <SelectItem key={pn.id} value={pn.id}>
+                                  <SelectItem key={String(pn.phone_number)} value={pn.phone_number}>
                                     {pn.phone_number}
                                     {pn.friendly_name && ` (${pn.friendly_name})`}
                                     {pn.assigned_agent_id &&
@@ -1682,7 +1677,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
                             </Select>
                             <div className="mt-2 flex items-center justify-between">
                               <FormDescription>
-                                Assign a phone number for this agent to receive inbound calls
+                                Assigning a number moves it from any other agent
                               </FormDescription>
                               <Button
                                 type="button"

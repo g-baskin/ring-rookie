@@ -41,6 +41,14 @@ Domain rules:
 - Null origins are accepted only under the documented localhost exception.
 - Public IDs are locators, not secrets; authorization still comes from endpoint policy.
 
+## Agent phone-number assignment
+
+Existing agents can receive an inbound number from **Agents → Advanced**. The editor lists live Telnyx or Twilio inventory using the first selected workspace's credentials, or account-level credentials when the agent has no selected workspace. Each result is enriched with the current user's assigned agent ID, allowing the selector to label numbers already in use.
+
+Assignment is stored on `Agent.phone_number_id` through `PUT /api/v1/agents/{agent_id}`. The endpoint distinguishes an omitted field from explicit `null`, clears an equivalent leading-plus/no-plus assignment from another agent owned by the same user, and commits the reassignment with the target update. Inbound lookup accepts either optional-plus representation.
+
+The complete contract—including UI states, API bodies, authorization, normalization limits, concurrency caveats, incident diagnostics, and test evidence—is in [Agent phone-number assignment](agent-phone-number-assignment.md).
+
 ## Telephone flow
 
 ```mermaid
@@ -94,6 +102,8 @@ Agent flags determine intended transcript/recording behavior. Call records can s
 - `backend/app/services/tools/`
 - `backend/app/models/agent.py`
 - `backend/app/models/call_record.py`
+- `backend/tests/test_api/test_agent_phone_assignment.py`
+- `frontend/src/app/dashboard/agents/[id]/page.tsx`
 - `frontend/src/app/dashboard/test/page.tsx`
 - `frontend/src/lib/realtime-webrtc.ts`
 - `frontend/src/app/embed/[publicId]/page.tsx`

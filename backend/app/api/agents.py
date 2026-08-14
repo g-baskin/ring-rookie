@@ -328,6 +328,23 @@ async def update_agent(
             detail="Agent not found",
         )
 
+    if "phone_number_id" in update_request.model_fields_set:
+        phone_number = update_request.phone_number_id
+        if phone_number:
+            normalized_phone_number = phone_number.lstrip("+")
+            assigned_result = await db.execute(
+                select(Agent).where(
+                    Agent.user_id == current_user.id,
+                    Agent.id != agent.id,
+                    Agent.phone_number_id.in_(
+                        (normalized_phone_number, f"+{normalized_phone_number}")
+                    ),
+                )
+            )
+            for assigned_agent in assigned_result.scalars():
+                assigned_agent.phone_number_id = None
+        agent.phone_number_id = phone_number
+
     # Apply updates from request
     _apply_agent_updates(agent, update_request)
 
@@ -354,7 +371,6 @@ def _apply_agent_updates(agent: Agent, request: UpdateAgentRequest) -> None:
         "voice",
         "enabled_tools",
         "enabled_tool_ids",
-        "phone_number_id",
         "enable_recording",
         "enable_transcript",
         "is_active",

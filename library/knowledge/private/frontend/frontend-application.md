@@ -40,7 +40,9 @@ Components should not embed alternate backend prefixes. The actual API has histo
 
 ## Agent configuration flow
 
-The agent editor maps user configuration onto the `Agent` API model: identity, description, pricing tier/provider profile, system prompt and target length, language/voice, initial greeting, temperature/token cap, turn-detection values, tool/integration selection, recording/transcription, status, and embed settings. Agent workspace membership is handled through workspace endpoints rather than a single agent field.
+The agent editor maps user configuration onto the `Agent` API model: identity, description, pricing tier/provider profile, system prompt and target length, language/voice, initial greeting, temperature/token cap, turn-detection values, tool/integration selection, recording/transcription, status, inbound phone assignment, and embed settings. Agent workspace membership is handled through workspace endpoints rather than a single agent field.
+
+Under **Advanced**, the phone selector queries live provider inventory with the active provider and either the first selected workspace or account-level credential scope. It uses the actual phone-number string as the form value, labels numbers assigned to another agent, and converts the local `none` sentinel to explicit API `null`. Assignment therefore moves a number from another owned agent, while selecting no number disables inbound routing. See [Agent phone-number assignment](../voice/agent-phone-number-assignment.md) for the complete contract.
 
 ## Realtime UI
 
@@ -65,5 +67,6 @@ Reusable primitives are under `frontend/src/components/ui/`; product components 
 - `frontend/src/hooks/use-auth.tsx`
 - `frontend/src/lib/api.ts`
 - `frontend/src/lib/realtime-webrtc.ts`
+- `frontend/src/app/dashboard/agents/[id]/page.tsx`
 - `frontend/src/app/dashboard/test/page.tsx`
 - `frontend/src/app/embed/[publicId]/page.tsx`

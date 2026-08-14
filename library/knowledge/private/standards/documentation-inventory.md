@@ -10,20 +10,26 @@ The repository had a partial schema-v2 library containing one operations narrati
 
 ## Coverage matrix
 
-| Area                  | Narrative                                                             | Governing implementation                                         |
-| --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Product/system        | `knowledge/public/overview/system-overview.md`                        | root README, route trees, agent model.                           |
-| Architecture          | `knowledge/private/architecture/system-architecture.md`               | backend composition, frontend layouts/providers, Compose.        |
-| Backend               | `knowledge/private/backend/backend-architecture.md`                   | `backend/app/api`, `services`, `core`, tests.                    |
-| Frontend              | `knowledge/private/frontend/frontend-application.md`                  | App Router pages, sidebar, auth/workspace contexts, API clients. |
-| Data                  | `knowledge/private/data/data-model.md`                                | 23 model classes and 34 migration files discovered.              |
-| API                   | `knowledge/private/api/api-surface.md`                                | route decorators in 22 route-bearing API modules.                |
-| Voice/telephony       | `knowledge/private/voice/voice-and-telephony.md`                      | realtime/embed/telephony routes and services.                    |
-| Chat/RAG/usage        | `knowledge/private/ai/chat-champ-and-rag.md`                          | chat/conversation/knowledge/usage models, routes, services.      |
-| Integrations/tools    | `knowledge/private/integrations/tool-runtime.md`                      | integration API/crypto and explicit tool registry.               |
-| Security/compliance   | `knowledge/private/security/security-and-compliance-boundaries.md`    | auth, middleware, compliance, public boundaries.                 |
-| Operations            | `knowledge/private/operations/local-runtime.md` plus preserved HA doc | Compose, health, config, scripts.                                |
-| Requirements baseline | `requirements/completed/prd-002-current-platform-baseline/`           | backwards-PRD across existing behavior.                          |
+| Area                  | Narrative                                                                                | Governing implementation                                         |
+| --------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Product/system        | `knowledge/public/overview/system-overview.md`                                           | root README, route trees, agent model.                           |
+| Architecture          | `knowledge/private/architecture/system-architecture.md`                                  | backend composition, frontend layouts/providers, Compose.        |
+| Backend               | `knowledge/private/backend/backend-architecture.md`                                      | `backend/app/api`, `services`, `core`, tests.                    |
+| Frontend              | `knowledge/private/frontend/frontend-application.md`                                     | App Router pages, sidebar, auth/workspace contexts, API clients. |
+| Data                  | `knowledge/private/data/data-model.md`                                                   | 23 model classes and 34 migration files discovered.              |
+| API                   | `knowledge/private/api/api-surface.md`                                                   | route decorators in 22 route-bearing API modules.                |
+| Voice/telephony       | `knowledge/private/voice/voice-and-telephony.md` plus `agent-phone-number-assignment.md` | realtime/embed/telephony routes, assignment UI/API, tests.       |
+| Chat/RAG/usage        | `knowledge/private/ai/chat-champ-and-rag.md`                                             | chat/conversation/knowledge/usage models, routes, services.      |
+| Integrations/tools    | `knowledge/private/integrations/tool-runtime.md`                                         | integration API/crypto and explicit tool registry.               |
+| Security/compliance   | `knowledge/private/security/security-and-compliance-boundaries.md`                       | auth, middleware, compliance, public boundaries.                 |
+| Operations            | `knowledge/private/operations/local-runtime.md` plus preserved HA doc                    | Compose, health, config, scripts.                                |
+| Requirements baseline | `requirements/completed/prd-002-current-platform-baseline/`                              | backwards-PRD across existing behavior.                          |
+
+## Feature synchronization: agent phone assignment
+
+The 2026-08-13 synchronization pass added an extreme-detail feature reference for assigning provider numbers from **Agents → Advanced** and updated the API, frontend, and telephony narratives. The synchronized contract covers live account/workspace provider inventory, owner-scoped assignment metadata, omitted-versus-null update semantics, same-owner reassignment, optional-leading-plus inbound lookup, UI empty/loading/in-use states, concurrency caveats, focused backend tests, and rendered screenshot evidence.
+
+Atomic entity and concept pages were also authored under the legacy-but-active `library/knowledge-base/wiki/` graph by `wiki-guardian`. Its global state files were intentionally not changed because the Legion TypeScript driver exclusively owns wiki index/log/hot/hash reconciliation.
 
 ## Confirmed drift
 

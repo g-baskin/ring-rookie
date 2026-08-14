@@ -25,11 +25,12 @@ Code and migrations define runtime behavior. These documents explain that behavi
 5. [Data model](knowledge/private/data/data-model.md)
 6. [API surface](knowledge/private/api/api-surface.md)
 7. [Voice and telephony flows](knowledge/private/voice/voice-and-telephony.md)
-8. [CRM, campaigns, and analytics](knowledge/private/domains/crm-campaigns-and-analytics.md)
-9. [Chat Champ and RAG](knowledge/private/ai/chat-champ-and-rag.md)
-10. [Integrations and tools](knowledge/private/integrations/tool-runtime.md)
-11. [Local operations](knowledge/private/operations/local-runtime.md)
-12. [Documentation inventory and drift audit](knowledge/private/standards/documentation-inventory.md)
+8. [Agent phone-number assignment](knowledge/private/voice/agent-phone-number-assignment.md)
+9. [CRM, campaigns, and analytics](knowledge/private/domains/crm-campaigns-and-analytics.md)
+10. [Chat Champ and RAG](knowledge/private/ai/chat-champ-and-rag.md)
+11. [Integrations and tools](knowledge/private/integrations/tool-runtime.md)
+12. [Local operations](knowledge/private/operations/local-runtime.md)
+13. [Documentation inventory and drift audit](knowledge/private/standards/documentation-inventory.md)
 
 ## Maintenance
 
