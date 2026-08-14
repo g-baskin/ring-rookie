@@ -50,6 +50,7 @@ export interface Agent {
   description: string | null;
   pricing_tier: string;
   system_prompt: string;
+  system_prompt_character_target: number;
   language: string;
   voice: string;
   enabled_tools: string[];
@@ -79,6 +80,7 @@ export interface CreateAgentRequest {
   description?: string;
   pricing_tier: "budget" | "balanced" | "premium-mini" | "premium";
   system_prompt: string;
+  system_prompt_character_target?: number;
   language: string;
   voice?: string;
   enabled_tools: string[];
@@ -138,6 +140,7 @@ export interface UpdateAgentRequest {
   description?: string;
   pricing_tier?: "budget" | "balanced" | "premium-mini" | "premium";
   system_prompt?: string;
+  system_prompt_character_target?: number;
   language?: string;
   voice?: string;
   enabled_tools?: string[];

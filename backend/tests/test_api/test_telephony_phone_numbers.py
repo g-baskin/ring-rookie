@@ -23,6 +23,9 @@ async def test_telnyx_sync_uses_account_credentials_for_all_workspaces() -> None
         hashed_password="unused",  # noqa: S106 -- inert value; auth is not exercised
     )
     db = AsyncMock(spec=AsyncSession)
+    query_result = MagicMock()
+    query_result.all.return_value = []
+    db.execute.return_value = query_result
     account_settings = SimpleNamespace(
         telnyx_api_key="account-api-key",
         telnyx_public_key="account-public-key",
@@ -80,6 +83,9 @@ async def test_telnyx_sync_uses_selected_workspace_credentials() -> None:
         hashed_password="unused",  # noqa: S106 -- inert value; auth is not exercised
     )
     db = AsyncMock(spec=AsyncSession)
+    query_result = MagicMock()
+    query_result.all.return_value = []
+    db.execute.return_value = query_result
     workspace_id = uuid.uuid4()
     workspace_settings = SimpleNamespace(
         telnyx_api_key="workspace-api-key",

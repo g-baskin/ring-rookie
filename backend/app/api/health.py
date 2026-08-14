@@ -16,8 +16,9 @@ router = APIRouter()
 
 
 @router.get("/health")
+@router.get("/health/live")
 async def health_check() -> dict[str, str]:
-    """Basic health check endpoint."""
+    """Report process liveness without checking external dependencies."""
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
@@ -25,30 +26,64 @@ async def health_check() -> dict[str, str]:
     }
 
 
-@router.get("/health/db")
-async def health_check_db(response: Response, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
-    """Database health check endpoint."""
+async def _database_is_ready(db: AsyncSession) -> bool:
     try:
         result = await db.execute(text("SELECT 1"))
         result.scalar()
-        return {"status": "healthy", "database": "connected"}
-    except Exception as e:
+    except Exception:
         logger.exception("Database health check failed")
+        return False
+    return True
+
+
+async def _redis_is_ready() -> bool:
+    try:
+        redis = await get_redis()
+        await redis.ping()
+    except Exception:
+        logger.exception("Redis health check failed")
+        return False
+    return True
+
+
+@router.get("/health/ready")
+async def readiness_check(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Report readiness only when PostgreSQL and Redis respond."""
+    database_ready = await _database_is_ready(db)
+    redis_ready = await _redis_is_ready()
+
+    if not database_ready or not redis_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unhealthy", "database": str(e)}
+        return {
+            "status": "unhealthy",
+            "database": "connected" if database_ready else "unavailable",
+            "redis": "connected" if redis_ready else "unavailable",
+        }
+
+    return {"status": "healthy", "database": "connected", "redis": "connected"}
+
+
+@router.get("/health/db")
+async def health_check_db(response: Response, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Database health check endpoint."""
+    if await _database_is_ready(db):
+        return {"status": "healthy", "database": "connected"}
+
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "unhealthy", "database": "unavailable"}
 
 
 @router.get("/health/redis")
 async def health_check_redis(response: Response) -> dict[str, str]:
     """Redis health check endpoint."""
-    try:
-        redis = await get_redis()
-        await redis.ping()
+    if await _redis_is_ready():
         return {"status": "healthy", "redis": "connected"}
-    except Exception as e:
-        logger.exception("Redis health check failed")
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "unhealthy", "redis": str(e)}
+
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "unhealthy", "redis": "unavailable"}
 
 
 @router.get("/health/cors")

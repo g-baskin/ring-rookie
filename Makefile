@@ -1,16 +1,42 @@
-.PHONY: help install dev stop clean reset-database test lint format migrate check backend-ci frontend-ci migration-check security-check dependency-check env-check ci
+.PHONY: help install dev stop dev-up dev-watch dev-status dev-logs dev-restart dev-down dev-smoke verify-backend verify-frontend verify-compose verify-hot-reload verify-recovery verify-persistence clean reset-database test lint format migrate check backend-ci frontend-ci migration-check security-check dependency-check env-check ci
 help:
+	@echo "Development: dev-up dev-watch dev-status dev-logs dev-restart dev-down dev-smoke"
+	@echo "Verification: verify-backend verify-frontend verify-compose verify-hot-reload verify-recovery verify-persistence"
 	@echo "CI: backend-ci frontend-ci migration-check security-check dependency-check env-check ci"
 	@echo "Maintenance: clean (artifacts only), reset-database CONFIRM_RESET=yes (destructive)"
 install:
 	cd backend && uv sync --all-extras
 	cd frontend && npm ci
-dev:
-	docker compose up -d postgres redis
-stop:
+dev: dev-up
+stop: dev-down
+dev-up:
+	docker compose up -d --wait
+dev-watch:
+	docker compose up --watch
+dev-status:
+	docker compose ps
+dev-logs:
+	docker compose logs --tail=200 -f frontend backend postgres redis
+dev-restart:
+	docker compose restart frontend backend
+dev-down:
 	docker compose down
+dev-smoke:
+	python3 scripts/smoke_stack.py
+verify-backend:
+	python3 scripts/verify_backend_ci.py
+verify-frontend:
+	python3 scripts/verify_frontend_ci.py
+verify-compose:
+	python3 scripts/verify_compose.py
+verify-hot-reload:
+	python3 scripts/verify_hot_reload.py
+verify-recovery:
+	python3 scripts/verify_recovery.py
+verify-persistence:
+	python3 scripts/verify_persistence.py
 clean:
-	rm -rf backend/.mypy_cache backend/.pytest_cache backend/.ruff_cache frontend/.next frontend/coverage
+	rm -rf backend/.mypy_cache backend/.pytest_cache backend/.ruff_cache frontend/.next frontend/.next-dev frontend/.next-build frontend/coverage
 reset-database:
 	@test "$(CONFIRM_RESET)" = yes || (echo "Destructive: rerun with CONFIRM_RESET=yes"; exit 1)
 	docker compose down -v

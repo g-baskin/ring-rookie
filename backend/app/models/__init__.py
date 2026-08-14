@@ -9,6 +9,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.effect_claim import EffectClaim
 from app.models.knowledge_base import KnowledgeBase, KnowledgeDocument
+from app.models.lesson_learned import LessonLearned
 from app.models.phone_number import PhoneNumber
 from app.models.privacy_settings import ConsentRecord, PrivacySettings
 from app.models.usage import AgentBillingConfig, BillingTier, UsageRecord
@@ -33,6 +34,7 @@ __all__ = [
     "EffectClaim",
     "KnowledgeBase",
     "KnowledgeDocument",
+    "LessonLearned",
     "Message",
     "PhoneNumber",
     "PrivacySettings",

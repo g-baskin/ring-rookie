@@ -23,6 +23,56 @@ class TestBasicHealthCheck:
         assert "version" in data
 
 
+class TestLivenessAndReadiness:
+    """Test orchestration health contracts."""
+
+    @pytest.mark.asyncio
+    async def test_liveness_alias_succeeds(self, test_client: AsyncClient) -> None:
+        response = await test_client.get("/health/live")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "healthy"
+
+    @pytest.mark.asyncio
+    async def test_readiness_succeeds(self, test_client: AsyncClient) -> None:
+        healthy_redis = AsyncMock()
+        healthy_redis.ping.return_value = True
+        with patch("app.api.health.get_redis", new=AsyncMock(return_value=healthy_redis)):
+            response = await test_client.get("/health/ready")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "healthy",
+            "database": "connected",
+            "redis": "connected",
+        }
+
+    @pytest.mark.asyncio
+    async def test_readiness_redacts_dependency_errors(self, test_client: AsyncClient) -> None:
+        error_detail = "postgresql://admin:secret@private-db:5432/ringrookie"
+        with (
+            patch(
+                "app.api.health._database_is_ready",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.api.health.get_redis",
+                new=AsyncMock(side_effect=RuntimeError(error_detail)),
+            ),
+        ):
+            response = await test_client.get("/health/ready")
+            liveness_response = await test_client.get("/health/live")
+
+        assert response.status_code == 503
+        assert response.json() == {
+            "status": "unhealthy",
+            "database": "unavailable",
+            "redis": "unavailable",
+        }
+        assert error_detail not in response.text
+        assert liveness_response.status_code == 200
+
+
 class TestDatabaseHealthCheck:
     """Test database health check endpoint."""
 
@@ -65,7 +115,7 @@ class TestDatabaseHealthCheck:
             assert response.status_code == 503
             data = response.json()
             assert data["status"] == "unhealthy"
-            assert "database" in data
+            assert data["database"] == "unavailable"
 
 
 class TestRedisHealthCheck:
@@ -74,7 +124,10 @@ class TestRedisHealthCheck:
     @pytest.mark.asyncio
     async def test_redis_health_check_success(self, test_client: AsyncClient) -> None:
         """Test Redis health check returns healthy status."""
-        response = await test_client.get("/health/redis")
+        healthy_redis = AsyncMock()
+        healthy_redis.ping.return_value = True
+        with patch("app.api.health.get_redis", new=AsyncMock(return_value=healthy_redis)):
+            response = await test_client.get("/health/redis")
 
         assert response.status_code == 200
         data = response.json()
@@ -84,27 +137,16 @@ class TestRedisHealthCheck:
     @pytest.mark.asyncio
     async def test_redis_health_check_failure(self, test_client: AsyncClient) -> None:
         """Test Redis health check handles connection failures."""
-        # Mock Redis error
-        with patch("app.db.redis.get_redis") as mock_get_redis:
-            mock_redis = AsyncMock()
-            mock_redis.ping = AsyncMock(side_effect=Exception("Redis connection failed"))
-            mock_get_redis.return_value = mock_redis
-
-            from app.db.redis import get_redis
-            from app.main import app
-
-            app.dependency_overrides[get_redis] = mock_get_redis
-
+        with patch(
+            "app.api.health.get_redis",
+            new=AsyncMock(side_effect=Exception("Redis connection failed")),
+        ):
             response = await test_client.get("/health/redis")
 
-            # Clean up override
-            app.dependency_overrides.clear()
-
-            # Service returns 503 when Redis is unhealthy
-            assert response.status_code == 503
-            data = response.json()
-            assert data["status"] == "unhealthy"
-            assert "redis" in data
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["redis"] == "unavailable"
 
 
 class TestHealthCheckIntegration:

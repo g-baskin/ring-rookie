@@ -157,17 +157,17 @@ async def get_telnyx_service(
     )
 
 
+def _normalize_phone_number(phone_number: str) -> str:
+    """Normalize a phone number for assignment comparisons."""
+    return phone_number.lstrip("+")
+
+
 async def get_agent_by_phone_number(phone_number: str, db: AsyncSession) -> Agent | None:
     """Find agent by assigned phone number."""
-    # Remove + prefix for comparison if present
-    normalized = phone_number.lstrip("+")
+    normalized = _normalize_phone_number(phone_number)
 
     result = await db.execute(
-        select(Agent).where(
-            (Agent.phone_number_id == phone_number)
-            | (Agent.phone_number_id == normalized)
-            | (Agent.phone_number_id == f"+{normalized}")
-        )
+        select(Agent).where(Agent.phone_number_id.in_((normalized, f"+{normalized}")))
     )
     return result.scalar_one_or_none()
 
@@ -342,7 +342,18 @@ async def list_phone_numbers(
     else:
         raise HTTPException(status_code=400, detail="Invalid provider. Use 'twilio' or 'telnyx'.")
 
-    # Map to response model
+    assigned_agents_result = await db.execute(
+        select(Agent.id, Agent.phone_number_id).where(
+            Agent.user_id == current_user.id,
+            Agent.phone_number_id.is_not(None),
+        )
+    )
+    assigned_agents = {
+        _normalize_phone_number(phone_number): str(agent_id)
+        for agent_id, phone_number in assigned_agents_result.all()
+        if phone_number
+    }
+
     return [
         PhoneNumberResponse(
             id=n.id,
@@ -350,7 +361,7 @@ async def list_phone_numbers(
             friendly_name=n.friendly_name,
             provider=n.provider,
             capabilities=n.capabilities,
-            assigned_agent_id=n.assigned_agent_id,
+            assigned_agent_id=assigned_agents.get(_normalize_phone_number(n.phone_number)),
         )
         for n in numbers
     ]

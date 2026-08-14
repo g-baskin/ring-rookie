@@ -1,0 +1,6 @@
+.next/
+.next-*/
+node_modules/
+coverage/
+out/
+public/widget/
